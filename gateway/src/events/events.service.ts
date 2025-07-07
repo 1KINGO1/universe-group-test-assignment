@@ -3,9 +3,12 @@ import {Event} from "@kingo1/universe-assignment-shared";
 import * as StreamArray from 'stream-json/streamers/StreamArray';
 import {chain} from 'stream-chain';
 import {Request, Response} from 'express';
+import {NatsService} from '../nats/nats.service';
 
 @Injectable()
 export class EventsService {
+	constructor(private readonly natsService: NatsService) {}
+
 	async processRequestBody(req: Request, res: Response) {
 		const pipeline = chain([
 			req,
@@ -26,7 +29,7 @@ export class EventsService {
 		});
 	}
 
-	async processEvent(event: Event) {
-		console.log(event);
+	processEvent(event: Event) {
+		return this.natsService.publish(event.source, event);
 	}
 }

@@ -1,9 +1,18 @@
-import { Module } from '@nestjs/common';
-import { EventsModule } from './events/events.module';
+import {Module} from '@nestjs/common';
+import {EventsModule} from './events/events.module';
+import {ConfigModule} from '@nestjs/config';
+import {NatsModule} from './nats/nats.module';
 
 @Module({
-  imports: [EventsModule],
-  controllers: [],
-  providers: [],
+	imports: [
+		EventsModule,
+		ConfigModule.forRoot({
+			isGlobal: true
+		}),
+		NatsModule
+	],
+	controllers: [],
+	providers: [],
 })
-export class AppModule {}
+export class AppModule {
+}

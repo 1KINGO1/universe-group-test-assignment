@@ -17,9 +17,23 @@ services:
       - ./gateway:/app
     environment:
       NODE_ENV: development
+      NATS_URL: nats:4222
     ports:
       - "3000:3000"
     networks:
       - app-network
+  nats:
+    image: nats:latest
+    command: [
+      "--jetstream",
+      "--store_dir", "/data/jetstream"
+    ]
+    volumes:
+      - nats-data:/data/jetstream
+    networks:
+      - app-network
+
 networks:
   app-network:
+volumes:
+  nats-data:
