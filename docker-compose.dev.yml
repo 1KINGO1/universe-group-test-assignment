@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  publisher:
+    image: andriiuni/events
+    environment:
+      EVENT_ENDPOINT: http://gateway:3000/events
+    networks:
+      - app-network
+  gateway:
+    depends_on:
+      - publisher
+    build:
+      context: gateway
+    command: npm run start:dev
+    volumes:
+      - ./gateway:/app
+    environment:
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+networks:
+  app-network:
