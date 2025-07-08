@@ -4,10 +4,14 @@ import * as StreamArray from 'stream-json/streamers/StreamArray';
 import {chain} from 'stream-chain';
 import {Request, Response} from 'express';
 import {NatsService} from '../nats/nats.service';
+import {MetricsService} from '../metrics/metrics.service';
 
 @Injectable()
 export class EventsService {
-	constructor(private readonly natsService: NatsService) {}
+	constructor(
+		private readonly natsService: NatsService,
+		private readonly metricsService: MetricsService
+	) {}
 
 	async processRequestBody(req: Request, res: Response) {
 		const batchSize = 500;
@@ -19,6 +23,7 @@ export class EventsService {
 		]);
 
 		pipeline.on('data', async ({ value }) => {
+			this.metricsService.processedEventsCounter.inc();
 			batch.push(value as Event);
 
 			if (batch.length >= batchSize) {
@@ -27,7 +32,14 @@ export class EventsService {
 				batch = [];
 
 				for (const event of batchToProcess) {
-					await this.processEvent(event);
+					try {
+						await this.processEvent(event);
+						this.metricsService.acceptedEventsCounter.inc();
+
+					}
+					catch(e) {
+						this.metricsService.failedEventsCounter.inc();
+					}
 				}
 
 				await new Promise(resolve => setTimeout(resolve, 100));

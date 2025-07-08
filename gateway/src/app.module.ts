@@ -2,6 +2,7 @@ import {Module} from '@nestjs/common';
 import {EventsModule} from './events/events.module';
 import {ConfigModule} from '@nestjs/config';
 import {NatsModule} from './nats/nats.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
 	imports: [
@@ -9,7 +10,8 @@ import {NatsModule} from './nats/nats.module';
 		ConfigModule.forRoot({
 			isGlobal: true
 		}),
-		NatsModule
+		NatsModule,
+		MetricsModule
 	],
 	controllers: [],
 	providers: [],
