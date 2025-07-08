@@ -6,3 +6,86 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id        String  @id @default(uuid())
+  source    Source
+  userId    String  @map("user_id")
+  name      String?
+  age       Int?
+  gender    Gender?
+  country   String?
+  city      String?
+  username  String?
+  followers Int?
+  events    Event[]
+
+  @@unique([source, userId])
+  @@map("users")
+}
+
+model Event {
+  id          String      @id @default(uuid())
+  eventId     String      @unique
+  timestamp   DateTime
+  eventType   String
+  funnelStage FunnelStage
+  source      Source
+  data        Json
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([timestamp])
+  @@index([eventType])
+  @@index([funnelStage])
+  @@map("events")
+}
+
+model EventLog {
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  service   String
+  status    String
+  timestamp DateTime @default(now())
+
+  @@map("event_logs")
+}
+
+enum Source {
+  facebook
+  tiktok
+
+  @@map("sources")
+}
+
+enum FunnelStage {
+  top
+  bottom
+
+  @@map("funnel_stages")
+}
+
+enum Gender {
+  male
+  female
+  non_binary
+
+  @@map("genders")
+}
+
+enum Service {
+  gateway
+  fb_collector
+  ttk_collector
+  reporter
+
+  @@map("services")
+}
+
+enum Status {
+  accepted
+  processed
+  failed
+
+  @@map("event_status")
+}
