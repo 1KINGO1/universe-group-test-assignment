@@ -21,7 +21,14 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	async publish(subject: string, message: Event) {
+		const js = this.nc.jetstream();
 		const msgString = JSON.stringify(message);
-		this.nc.publish(subject, this.sc.encode(msgString));
+
+		try {
+			return await js.publish(subject, this.sc.encode(msgString));
+		} catch (err) {
+			console.error('Failed to publish message:', err, message);
+			throw err;
+		}
 	}
 }
