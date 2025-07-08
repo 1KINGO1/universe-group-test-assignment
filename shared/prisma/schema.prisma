@@ -21,6 +21,10 @@ model User {
   events    Event[]
 
   @@unique([source, userId])
+  @@index([gender])
+  @@index([country])
+  @@index([city])
+  @@index([age])
   @@map("users")
 }
 
