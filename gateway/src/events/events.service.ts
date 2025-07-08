@@ -23,7 +23,6 @@ export class EventsService {
 		]);
 
 		pipeline.on('data', async ({ value }) => {
-			this.metricsService.processedEventsCounter.inc();
 			batch.push(value as Event);
 
 			if (batch.length >= batchSize) {
@@ -34,10 +33,11 @@ export class EventsService {
 				for (const event of batchToProcess) {
 					try {
 						await this.processEvent(event);
+						this.metricsService.processedEventsCounter.inc();
 						this.metricsService.acceptedEventsCounter.inc();
-
 					}
 					catch(e) {
+						this.metricsService.processedEventsCounter.inc();
 						this.metricsService.failedEventsCounter.inc();
 					}
 				}
