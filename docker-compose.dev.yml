@@ -5,6 +5,7 @@ services:
     depends_on:
       - gateway
       - fb-collector
+      - ttk-collector
     image: andriiuni/events
     environment:
       EVENT_ENDPOINT: http://gateway:3000/events
@@ -63,6 +64,20 @@ services:
       NATS_URL: nats:4222
       NATS_STREAM: FACEBOOK
       NATS_CONSUMER: fb-collector
+      DATABASE_URL: postgres://admin:123456@postgres/main
+    networks:
+      - app-network
+  ttk-collector:
+    depends_on:
+      - postgres
+      - nats
+    build:
+      context: ttk-collector
+    environment:
+      NODE_ENV: development
+      NATS_URL: nats:4222
+      NATS_STREAM: TIKTOK
+      NATS_CONSUMER: ttk-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network

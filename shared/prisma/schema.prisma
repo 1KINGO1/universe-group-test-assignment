@@ -26,13 +26,13 @@ model User {
 
 model Event {
   id          String      @id @default(uuid())
-  eventId     String      @unique
+  eventId     String      @map("event_id")
   timestamp   DateTime
-  eventType   String
-  funnelStage FunnelStage
+  eventType   String      @map("event_type")
+  funnelStage FunnelStage @map("funnel_stage")
   source      Source
   data        Json
-  userId      String
+  userId      String      @map("user_id")
   user        User        @relation(fields: [userId], references: [id])
 
   @@index([timestamp])

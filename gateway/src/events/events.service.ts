@@ -10,13 +10,29 @@ export class EventsService {
 	constructor(private readonly natsService: NatsService) {}
 
 	async processRequestBody(req: Request, res: Response) {
+		const batchSize = 500;
+		let batch: Event[] = [];
+
 		const pipeline = chain([
 			req,
 			StreamArray.withParser(),
 		]);
 
 		pipeline.on('data', async ({ value }) => {
-			this.processEvent(value as Event);
+			batch.push(value as Event);
+
+			if (batch.length >= batchSize) {
+				pipeline.pause();
+				const batchToProcess = batch;
+				batch = [];
+
+				for (const event of batchToProcess) {
+					await this.processEvent(event);
+				}
+
+				await new Promise(resolve => setTimeout(resolve, 100));
+				pipeline.resume();
+			}
 		});
 
 		pipeline.on('end', () => {

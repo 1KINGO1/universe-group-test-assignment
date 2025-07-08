@@ -22,8 +22,6 @@ COPY --from=builder /app/package-lock.json ./package-lock.json
 RUN npm ci
 RUN npm install -g @nestjs/cli
 
-RUN npm run prisma:generate
-
 COPY --from=builder /app/dist ./dist
 RUN npm run prisma:generate
 

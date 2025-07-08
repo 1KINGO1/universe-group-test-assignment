@@ -1,0 +1,68 @@
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { PrismaService, NatsConsumerService, TiktokEvent } from '@kingo1/universe-assignment-shared';
+
+@Injectable()
+export class EventCollectorService implements OnModuleInit {
+	constructor(
+		private readonly natsService: NatsConsumerService,
+		private readonly prismaService: PrismaService,
+	) {}
+
+	async onModuleInit() {
+		this.natsService.subscribe(async (data) => {
+			const event = data as TiktokEvent;
+
+			try {
+				const userId = `${event.source}:${event.data.user.userId}`;
+
+				const userPayload = {
+					id: userId,
+					userId: event.data.user.userId,
+					source: event.source,
+					name: event.data.user.username,
+					followers: event.data.user.followers,
+				};
+
+				const eventPayload = {
+					eventId: event.eventId,
+					source: event.source,
+					eventType: event.eventType,
+					funnelStage: event.funnelStage,
+					timestamp: new Date(event.timestamp),
+					data: event.data.engagement,
+					userId,
+				};
+
+				const logPayload = {
+					eventId: event.eventId,
+					service: `${event.source}_collector`,
+					status: 'processed',
+				};
+
+				await this.prismaService.$transaction([
+					this.prismaService.user.upsert({
+						where: { id: userId },
+						update: userPayload,
+						create: userPayload,
+					}),
+					this.prismaService.event.create({
+						data: eventPayload as never,
+					}),
+					this.prismaService.eventLog.create({
+						data: logPayload,
+					}),
+				]);
+			} catch (err) {
+				console.error('Caught error:', err);
+				await this.prismaService.eventLog.create({
+					data: {
+						eventId: event.eventId,
+						service: `${event.source}_collector`,
+						status: 'failed',
+					},
+				});
+				throw err;
+			}
+		});
+	}
+}
