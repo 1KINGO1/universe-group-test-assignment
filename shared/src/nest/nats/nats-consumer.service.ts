@@ -1,30 +1,31 @@
-import {Injectable, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
+import {Inject, Injectable, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
 import {AckPolicy, connect, NatsConnection, StringCodec} from 'nats';
-import {ConfigService} from '@nestjs/config';
-import {FacebookEvent} from '@kingo1/universe-assignment-shared';
+import {Event} from '../../types';
+import { ConfigService } from '@nestjs/config';
 
-type HandlerFunction = (data: FacebookEvent) => Promise<void>;
+type HandlerFunction = (data: Event) => Promise<void>;
 
 @Injectable()
-export class NatsService implements OnModuleInit, OnModuleDestroy {
+export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 	private nc: NatsConnection;
 	private sc = StringCodec();
 	private handlers: HandlerFunction[];
 	private started = false;
 
-	constructor(private readonly configService: ConfigService) {}
+	constructor(
+		private readonly configService: ConfigService
+	) {}
 
 	async onModuleInit() {
 		this.handlers = [];
-		this.nc = await connect({ servers: `nats://${this.configService.getOrThrow('NATS_URL')}` });
+		this.nc = await connect({ servers: `nats://${this.configService.getOrThrow("NATS_URL")}` });
 		console.log('Connected to NATS');
 
 		const jsm = await this.nc.jetstreamManager();
-		const js = this.nc.jetstream();
 
 		try {
-			await jsm.consumers.add("FACEBOOK", {
-				name: "fb-collector",
+			await jsm.consumers.add(this.configService.getOrThrow("NATS_STREAM"), {
+				name: this.configService.getOrThrow("NATS_CONSUMER"),
 				ack_policy: AckPolicy.Explicit,
 			});
 		} catch (err) {
@@ -43,7 +44,7 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
 
 	private async consumeLoop() {
 		const js = this.nc.jetstream();
-		const c = await js.consumers.get("FACEBOOK", "fb-collector");
+		const c = await js.consumers.get(this.configService.getOrThrow("NATS_STREAM"), this.configService.getOrThrow("NATS_CONSUMER"));
 
 		while (true) {
 			const messages = await c.consume({ max_messages: 10 });

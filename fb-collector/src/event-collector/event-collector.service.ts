@@ -1,44 +1,45 @@
 import {Injectable, OnModuleInit} from '@nestjs/common';
-import {NatsService} from '../nats/nats.service';
-import {PrismaService} from '@kingo1/universe-assignment-shared';
+import {PrismaService, NatsConsumerService, FacebookEvent} from '@kingo1/universe-assignment-shared';
 import {Gender} from '@prisma/client';
 
 @Injectable()
 export class EventCollectorService implements OnModuleInit{
 	constructor(
-		private readonly natsService: NatsService,
+		private readonly natsService: NatsConsumerService,
 		private readonly prismaService: PrismaService
 	) {}
 
 	async onModuleInit() {
 		this.natsService.subscribe(async data => {
+			const event = data as FacebookEvent;
+
 			try {
-				const userId = `${data.source}:${data.data.user.userId}`;
+				const userId = `${event.source}:${event.data.user.userId}`;
 
 				const userPayload = {
 					id: userId,
-					userId: data.data.user.userId,
-					source: data.source,
-					name: data.data.user.name,
-					age: data.data.user.age,
-					gender: data.data.user.gender === 'non-binary' ? 'non_binary' : data.data.user.gender as Gender,
-					city: data.data.user.location.city,
-					country: data.data.user.location.country,
+					userId: event.data.user.userId,
+					source: event.source,
+					name: event.data.user.name,
+					age: event.data.user.age,
+					gender: event.data.user.gender === 'non-binary' ? 'non_binary' : event.data.user.gender as Gender,
+					city: event.data.user.location.city,
+					country: event.data.user.location.country,
 				};
 
 				const eventPayload = {
-					eventId: data.eventId,
-					source: data.source,
-					eventType: data.eventType,
-					funnelStage: data.funnelStage,
-					timestamp: new Date(data.timestamp),
-					data: data.data.engagement,
+					eventId: event.eventId,
+					source: event.source,
+					eventType: event.eventType,
+					funnelStage: event.funnelStage,
+					timestamp: new Date(event.timestamp),
+					data: event.data.engagement,
 					userId,
 				};
 
 				const logPayload = {
-					eventId: data.eventId,
-					service: `${data.source}_collector`,
+					eventId: event.eventId,
+					service: `${event.source}_collector`,
 					status: "processed",
 				};
 
@@ -59,8 +60,8 @@ export class EventCollectorService implements OnModuleInit{
 				console.log('Catched error:', err);
 				await this.prismaService.eventLog.create({
 					data: {
-						eventId: data.eventId,
-						service: `${data.source}_collector`,
+						eventId: event.eventId,
+						service: `${event.source}_collector`,
 						status: "failed",
 					},
 				});

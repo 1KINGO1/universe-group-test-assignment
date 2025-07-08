@@ -61,6 +61,8 @@ services:
     environment:
       NODE_ENV: development
       NATS_URL: nats:4222
+      NATS_STREAM: FACEBOOK
+      NATS_CONSUMER: fb-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
