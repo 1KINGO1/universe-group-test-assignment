@@ -2,6 +2,7 @@ version: "3.8"
 
 services:
   publisher:
+    restart: on-failure
     depends_on:
       - gateway
       - fb-collector
@@ -12,33 +13,34 @@ services:
     networks:
       - app-network
   gateway:
+    restart: on-failure
     depends_on:
       - nats
       - postgres
       - prometheus
     build:
       context: gateway
-#    command: npm run start:dev
-#    volumes:
-#      - ./gateway:/app
     environment:
       NODE_ENV: development
       NATS_URL: nats:4222
-    # ports:
-    #   - "3000:3000"
     networks:
       - app-network
   nats:
+    restart: on-failure
     image: nats:latest
     command: [
       "--jetstream",
-      "--store_dir", "/data/jetstream"
+      "--store_dir", "/data/jetstream",
+      "-m", "8222"
     ]
+    ports:
+      - "8222:8222"
     volumes:
       - nats-data:/data/jetstream
     networks:
       - app-network
   postgres:
+    restart: on-failure
     image: postgres:latest
     environment:
       POSTGRES_USER: admin
@@ -51,16 +53,13 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
   fb-collector:
+    restart: on-failure
     depends_on:
       - postgres
       - nats
       - prometheus
     build:
       context: fb-collector
-#    command: npm run start:dev
-#    volumes:
-#      - ./fb-collector:/app
-#      - ./fb-collector/node_modules:/app/node_modules
     environment:
       NODE_ENV: development
       NATS_URL: nats:4222
@@ -70,6 +69,7 @@ services:
     networks:
       - app-network
   ttk-collector:
+    restart: on-failure
     depends_on:
       - postgres
       - nats
@@ -86,6 +86,7 @@ services:
       - app-network
 
   reporter:
+    restart: on-failure
     depends_on:
       - postgres
     build:
@@ -93,10 +94,13 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://admin:123456@postgres/main
+    ports:
+      - "3000:3000"
     networks:
       - app-network
 
   prometheus:
+    restart: on-failure
     image: prom/prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -106,9 +110,10 @@ services:
       - app-network
 
   grafana:
+    restart: on-failure
     image: grafana/grafana
     ports:
-      - "3004:3000"
+      - "3001:3000"
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:

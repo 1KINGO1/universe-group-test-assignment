@@ -5,6 +5,7 @@ import {chain} from 'stream-chain';
 import {Request, Response} from 'express';
 import {NatsService} from '../nats/nats.service';
 import {MetricsService} from '../metrics/metrics.service';
+import { eventSchema } from './schemas/event.schema';
 
 @Injectable()
 export class EventsService {
@@ -58,6 +59,13 @@ export class EventsService {
 	}
 
 	processEvent(event: Event) {
-		return this.natsService.publish(event.source, event);
+		const result = eventSchema.safeParse(event);
+
+		if (!result.success) {
+			throw new Error(`Invalid event format. Errors: ${JSON.stringify(result.error.errors)}`);
+		}
+		const validEvent = result.data;
+
+		return this.natsService.publish(event.source, validEvent);
 	}
 }

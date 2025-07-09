@@ -8,6 +8,7 @@ RUN npm ci
 
 COPY . .
 
+RUN npm run prisma:generate
 RUN npm run build
 
 
@@ -22,6 +23,7 @@ RUN npm ci
 RUN npm install -g @nestjs/cli
 
 COPY --from=builder /app/dist ./dist
+RUN npm run prisma:generate
 
 EXPOSE 3000
 ENV NODE_ENV=production

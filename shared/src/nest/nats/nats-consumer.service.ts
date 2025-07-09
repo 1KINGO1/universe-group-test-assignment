@@ -1,7 +1,7 @@
-import {Inject, Injectable, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
+import {Injectable, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
 import {AckPolicy, connect, NatsConnection, StringCodec} from 'nats';
 import {Event} from '../../types';
-import { ConfigService } from '@nestjs/config';
+import {ConfigService} from '@nestjs/config';
 
 type HandlerFunction = (data: Event) => Promise<void>;
 
@@ -14,11 +14,12 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 
 	constructor(
 		private readonly configService: ConfigService
-	) {}
+	) {
+	}
 
 	async onModuleInit() {
 		this.handlers = [];
-		this.nc = await connect({ servers: `nats://${this.configService.getOrThrow("NATS_URL")}` });
+		this.nc = await connect({servers: `nats://${this.configService.getOrThrow("NATS_URL")}`});
 		console.log('Connected to NATS');
 
 		const jsm = await this.nc.jetstreamManager();
@@ -47,18 +48,20 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 		const c = await js.consumers.get(this.configService.getOrThrow("NATS_STREAM"), this.configService.getOrThrow("NATS_CONSUMER"));
 
 		while (true) {
-			const messages = await c.consume({ max_messages: 10 });
+			const messages = await c.consume({ max_messages: 20 });
 			try {
+				const promises: Promise<void>[] = [];
 				for await (const m of messages) {
 					const data = JSON.parse(this.sc.decode(m.data));
 
-					try {
-						await Promise.all(this.handlers.map(handler => handler(data)));
-						m.ack();
-					} catch (err) {
-						m.nak();
-					}
+					promises.push(
+						Promise.all(this.handlers.map(handler => handler(data)))
+							.then(() => m.ack())
+							.catch(() => m.nak())
+					);
 				}
+
+				await Promise.all(promises);
 			} catch (err) {
 				await new Promise(resolve => setTimeout(resolve, 1000));
 			}

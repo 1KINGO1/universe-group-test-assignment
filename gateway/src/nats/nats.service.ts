@@ -42,7 +42,9 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
 		const msgString = JSON.stringify(message);
 
 		try {
-			return await this.js.publish(`${subject}.${message.eventType}`, this.sc.encode(msgString));
+			return await this.js.publish(`${subject}.${message.eventType}`, this.sc.encode(msgString), {
+				timeout: 5000
+			});
 		} catch (err) {
 			console.error('Failed to publish message:', err, message);
 			throw err;
