@@ -35,12 +35,6 @@ export class EventCollectorService implements OnModuleInit {
 					userId,
 				};
 
-				const logPayload = {
-					eventId: event.eventId,
-					service: `${event.source}_collector`,
-					status: 'processed',
-				};
-
 				await this.prismaService.$transaction([
 					this.prismaService.user.upsert({
 						where: { id: userId },
@@ -49,22 +43,12 @@ export class EventCollectorService implements OnModuleInit {
 					}),
 					this.prismaService.event.create({
 						data: eventPayload as never,
-					}),
-					this.prismaService.eventLog.create({
-						data: logPayload,
-					}),
+					})
 				]);
 				this.metricsService.acceptedEventsCounter.inc();
 			} catch (err) {
 				this.metricsService.failedEventsCounter.inc();
 				console.error('Caught error:', err);
-				await this.prismaService.eventLog.create({
-					data: {
-						eventId: event.eventId,
-						service: `${event.source}_collector`,
-						status: 'failed',
-					},
-				});
 				throw err;
 			}
 			finally {
