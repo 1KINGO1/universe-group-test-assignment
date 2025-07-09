@@ -115,7 +115,9 @@ services:
     ports:
       - "3001:3000"
     volumes:
-      - grafana-storage:/var/lib/grafana
+      - ./grafana/grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     networks:
       - app-network
 
@@ -124,4 +126,3 @@ networks:
 volumes:
   nats-data:
   postgres-data:
-  grafana-storage:

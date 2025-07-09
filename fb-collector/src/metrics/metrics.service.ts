@@ -13,19 +13,19 @@ export class MetricsService {
     collectDefaultMetrics({ register: this.registry });
 
     this.acceptedEventsCounter = new Counter({
-      name: 'gateway_events_accepted_total',
+      name: 'fb_collector_events_accepted_total',
       help: 'Total accepted events',
       registers: [this.registry],
     });
 
     this.processedEventsCounter = new Counter({
-      name: 'gateway_events_processed_total',
+      name: 'fb_collector_events_processed_total',
       help: 'Total processed events',
       registers: [this.registry],
     });
 
     this.failedEventsCounter = new Counter({
-      name: 'gateway_events_failed_total',
+      name: 'fb_collector_events_failed_total',
       help: 'Total failed events',
       registers: [this.registry],
     });

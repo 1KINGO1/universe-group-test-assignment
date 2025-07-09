@@ -1,11 +1,13 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService, NatsConsumerService, TiktokEvent } from '@kingo1/universe-assignment-shared';
+import {MetricsService} from '../metrics/metrics.service';
 
 @Injectable()
 export class EventCollectorService implements OnModuleInit {
 	constructor(
 		private readonly natsService: NatsConsumerService,
 		private readonly prismaService: PrismaService,
+		private readonly metricsService: MetricsService
 	) {}
 
 	async onModuleInit() {
@@ -52,7 +54,9 @@ export class EventCollectorService implements OnModuleInit {
 						data: logPayload,
 					}),
 				]);
+				this.metricsService.acceptedEventsCounter.inc();
 			} catch (err) {
+				this.metricsService.failedEventsCounter.inc();
 				console.error('Caught error:', err);
 				await this.prismaService.eventLog.create({
 					data: {
@@ -62,6 +66,9 @@ export class EventCollectorService implements OnModuleInit {
 					},
 				});
 				throw err;
+			}
+			finally {
+				this.metricsService.processedEventsCounter.inc();
 			}
 		});
 	}

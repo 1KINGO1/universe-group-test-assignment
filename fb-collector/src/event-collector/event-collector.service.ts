@@ -1,12 +1,14 @@
 import {Injectable, OnModuleInit} from '@nestjs/common';
 import {PrismaService, NatsConsumerService, FacebookEvent} from '@kingo1/universe-assignment-shared';
 import {Gender} from '@prisma/client';
+import {MetricsService} from '../metrics/metrics.service';
 
 @Injectable()
 export class EventCollectorService implements OnModuleInit{
 	constructor(
 		private readonly natsService: NatsConsumerService,
-		private readonly prismaService: PrismaService
+		private readonly prismaService: PrismaService,
+		private readonly metricsService: MetricsService
 	) {}
 
 	async onModuleInit() {
@@ -56,7 +58,9 @@ export class EventCollectorService implements OnModuleInit{
 						data: logPayload,
 					}),
 				]);
+				this.metricsService.acceptedEventsCounter.inc();
 			} catch (err) {
+				this.metricsService.failedEventsCounter.inc();
 				console.log('Catched error:', err);
 				await this.prismaService.eventLog.create({
 					data: {
@@ -66,6 +70,9 @@ export class EventCollectorService implements OnModuleInit{
 					},
 				});
 				throw err;
+			}
+			finally {
+				this.metricsService.processedEventsCounter.inc();
 			}
 		})
 	}
