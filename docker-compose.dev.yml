@@ -16,7 +16,7 @@ services:
     restart: on-failure
     depends_on:
       - nats
-      - postgres
+      - prisma-migrate
       - prometheus
     build:
       context: gateway
@@ -55,7 +55,7 @@ services:
   fb-collector:
     restart: on-failure
     depends_on:
-      - postgres
+      - prisma-migrate
       - nats
       - prometheus
     build:
@@ -71,7 +71,7 @@ services:
   ttk-collector:
     restart: on-failure
     depends_on:
-      - postgres
+      - prisma-migrate
       - nats
       - prometheus
     build:
@@ -88,7 +88,7 @@ services:
   reporter:
     restart: on-failure
     depends_on:
-      - postgres
+      - prisma-migrate
     build:
       context: reporter
     environment:
@@ -118,6 +118,15 @@ services:
       - ./grafana/grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - app-network
+
+  prisma-migrate:
+    build: migration-runner
+    environment:
+      DATABASE_URL: postgres://admin:123456@postgres/main
+    depends_on:
+      - postgres
     networks:
       - app-network
 

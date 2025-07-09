@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "@kingo1/universe-assignment-shared": "^1.0.30"
+  },
+  "scripts": {
+    "prisma:generate": "npx prisma generate --schema=node_modules/@kingo1/universe-assignment-shared/prisma/schema.prisma",
+    "prisma:deploy": "npx prisma migrate deploy --schema=node_modules/@kingo1/universe-assignment-shared/prisma/schema.prisma",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
