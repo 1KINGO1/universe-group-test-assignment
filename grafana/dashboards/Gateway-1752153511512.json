@@ -111,10 +111,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "derdqpe48w35se"
-      },
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
