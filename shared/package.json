@@ -1,6 +1,6 @@
 {
   "name": "@kingo1/universe-assignment-shared",
-  "version": "1.0.31",
+  "version": "1.0.35",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

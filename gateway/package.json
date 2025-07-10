@@ -17,10 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prisma:generate": "npx prisma generate --schema=node_modules/@kingo1/universe-assignment-shared/prisma/schema.prisma"
   },
   "dependencies": {
-    "@kingo1/universe-assignment-shared": "^1.0.1",
+    "@kingo1/universe-assignment-shared": "^1.0.31",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

@@ -5,8 +5,6 @@ services:
     restart: on-failure
     depends_on:
       - gateway
-      - fb-collector
-      - ttk-collector
     image: andriiuni/events
     environment:
       EVENT_ENDPOINT: http://gateway:3000/events
@@ -17,12 +15,28 @@ services:
     depends_on:
       - nats
       - prisma-migrate
-      - prometheus
     build:
       context: gateway
     environment:
       NODE_ENV: development
       NATS_URL: nats:4222
+      DATABASE_URL: postgres://admin:123456@postgres/main
+    networks:
+      - app-network
+  gateway-processor:
+    restart: on-failure
+    depends_on:
+      - nats
+      - prisma-migrate
+    build:
+      context: gateway-processor
+    environment:
+      NODE_ENV: development
+      NATS_URL: nats:4222
+      DATABASE_URL: postgres://admin:123456@postgres/main
+      OUTBOX_POLL_INTERVAL_MS: 500
+      OUTBOX_BATCH_SIZE: 300
+      OUTBOX_MAX_RETRIES: 2
     networks:
       - app-network
   nats:
@@ -57,7 +71,6 @@ services:
     depends_on:
       - prisma-migrate
       - nats
-      - prometheus
     build:
       context: fb-collector
     environment:
@@ -73,7 +86,6 @@ services:
     depends_on:
       - prisma-migrate
       - nats
-      - prometheus
     build:
       context: ttk-collector
     environment:

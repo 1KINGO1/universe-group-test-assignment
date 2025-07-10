@@ -1,21 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import {Event} from "@kingo1/universe-assignment-shared";
+import {Injectable, Logger} from '@nestjs/common';
+import {Event, PrismaService} from "@kingo1/universe-assignment-shared";
 import * as StreamArray from 'stream-json/streamers/StreamArray';
 import {chain} from 'stream-chain';
 import {Request, Response} from 'express';
-import {NatsService} from '../nats/nats.service';
-import {MetricsService} from '../metrics/metrics.service';
-import { eventSchema } from './schemas/event.schema';
+import {eventSchema} from './schemas/event.schema';
+import { OutboxStatus, Prisma } from '@prisma/client';
+import { MetricsService } from 'src/metrics/metrics.service';
 
 @Injectable()
 export class EventsService {
-	constructor(
-		private readonly natsService: NatsService,
+	private readonly logger = new Logger(EventsService.name);
+
+	constructor( 
+		private readonly prismaService: PrismaService,
 		private readonly metricsService: MetricsService
 	) {}
 
 	async processRequestBody(req: Request, res: Response) {
-		const batchSize = 500;
+		const batchSize = 1000;
 		let batch: Event[] = [];
 
 		const pipeline = chain([
@@ -23,32 +25,27 @@ export class EventsService {
 			StreamArray.withParser(),
 		]);
 
-		pipeline.on('data', async ({ value }) => {
+		pipeline.on('data', async ({value}) => {
 			batch.push(value as Event);
 
 			if (batch.length >= batchSize) {
 				pipeline.pause();
-				const batchToProcess = batch;
-				batch = [];
-
-				for (const event of batchToProcess) {
-					try {
-						await this.processEvent(event);
-						this.metricsService.processedEventsCounter.inc();
-						this.metricsService.acceptedEventsCounter.inc();
-					}
-					catch(e) {
-						this.metricsService.processedEventsCounter.inc();
-						this.metricsService.failedEventsCounter.inc();
-					}
+				try {
+					await this.processEventBatch(batch);
+					batch = [];
+				} 
+				catch(e) {
+					console.error(e);
+				} 
+				finally {
+					pipeline.resume();
 				}
-
-				await new Promise(resolve => setTimeout(resolve, 100));
-				pipeline.resume();
+				
 			}
 		});
 
 		pipeline.on('end', () => {
+			this.processEventBatch(batch);
 			res.status(200).send('All points processed');
 		});
 
@@ -58,14 +55,50 @@ export class EventsService {
 		});
 	}
 
-	processEvent(event: Event) {
+	private validateEvent(event: Event): boolean {
 		const result = eventSchema.safeParse(event);
+		return result.success;
+	}
 
-		if (!result.success) {
-			throw new Error(`Invalid event format. Errors: ${JSON.stringify(result.error.errors)}`);
+	private async processEventBatch(events: Event[]) {
+		this.logger.log('Processing event batch: ', events.length);
+		const outboxEvents: Prisma.OutboxEventCreateManyInput[] = [];
+		let failedCount = 0;
+
+		for (const event of events) {
+			const isValid = this.validateEvent(event);
+
+			const outboxEvent: Prisma.OutboxEventCreateManyInput = {
+				sentAt: new Date(event.timestamp),
+				source: event.source,
+				eventType: event.eventType,
+				payload: JSON.stringify(event.data),
+			}
+
+			if (!isValid) {
+				outboxEvents.push({
+					...outboxEvent,
+					error: 'Invalid event format',
+					status: OutboxStatus.FAILED
+				});
+				failedCount++;
+				continue;
+			}
+
+			outboxEvents.push(outboxEvent);
 		}
-		const validEvent = result.data;
 
-		return this.natsService.publish(event.source, validEvent);
+		if (outboxEvents.length === 0) {
+			return;
+		}
+
+		await this.prismaService.outboxEvent.createMany({
+			data: outboxEvents,
+			skipDuplicates: true,
+		});
+
+		this.metricsService.processedEventsCounter.inc(outboxEvents.length);
+		this.metricsService.failedEventsCounter.inc(failedCount);
+		this.metricsService.acceptedEventsCounter.inc(outboxEvents.length - failedCount);
 	}
 }

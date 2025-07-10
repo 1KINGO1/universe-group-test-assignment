@@ -5,6 +5,9 @@ scrape_configs:
   - job_name: 'gateway'
     static_configs:
       - targets: ['gateway:3000']
+  - job_name: 'gateway-processor'
+    static_configs:
+      - targets: ['gateway-processor:3000']
   - job_name: 'fb_collector'
     static_configs:
       - targets: ['fb-collector:3000']

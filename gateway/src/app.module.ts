@@ -1,7 +1,7 @@
 import {Module} from '@nestjs/common';
 import {EventsModule} from './events/events.module';
 import {ConfigModule} from '@nestjs/config';
-import {NatsModule} from './nats/nats.module';
+import {PrismaModule} from '@kingo1/universe-assignment-shared';
 import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
@@ -10,7 +10,7 @@ import { MetricsModule } from './metrics/metrics.module';
 		ConfigModule.forRoot({
 			isGlobal: true
 		}),
-		NatsModule,
+		PrismaModule,
 		MetricsModule
 	],
 	controllers: [],

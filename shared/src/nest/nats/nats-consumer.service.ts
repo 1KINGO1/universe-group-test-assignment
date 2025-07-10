@@ -11,6 +11,7 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 	private sc = StringCodec();
 	private handlers: HandlerFunction[];
 	private started = false;
+	private running = false;
 
 	constructor(
 		private readonly configService: ConfigService
@@ -19,6 +20,7 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 
 	async onModuleInit() {
 		this.handlers = [];
+		this.running = true;
 		this.nc = await connect({servers: `nats://${this.configService.getOrThrow("NATS_URL")}`});
 		console.log('Connected to NATS');
 
@@ -39,33 +41,47 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	async onModuleDestroy() {
+		this.running = false;
 		await this.nc.close();
 		console.log('Disconnected from NATS');
 	}
 
 	private async consumeLoop() {
-		const js = this.nc.jetstream();
-		const c = await js.consumers.get(this.configService.getOrThrow("NATS_STREAM"), this.configService.getOrThrow("NATS_CONSUMER"));
+  const js = this.nc.jetstream();
+  const c = await js.consumers.get(
+    this.configService.getOrThrow("NATS_STREAM"),
+    this.configService.getOrThrow("NATS_CONSUMER"),
+  );
 
-		while (true) {
-			const messages = await c.consume({ max_messages: 20 });
-			try {
-				const promises: Promise<void>[] = [];
-				for await (const m of messages) {
-					const data = JSON.parse(this.sc.decode(m.data));
+  while (this.running) {
+    const messages = await c.fetch({ max_messages: 20 });
 
-					promises.push(
-						Promise.all(this.handlers.map(handler => handler(data)))
-							.then(() => m.ack())
-							.catch(() => m.nak())
-					);
-				}
+    let hasMessages = false;
+    try {
+      const promises: Promise<void>[] = [];
 
-				await Promise.all(promises);
-			} catch (err) {
-				await new Promise(resolve => setTimeout(resolve, 1000));
-			}
-		}
+      for await (const m of messages) {
+        hasMessages = true;
+        const data = JSON.parse(this.sc.decode(m.data));
+
+        promises.push(
+          Promise.all(this.handlers.map(handler => handler(data)))
+            .then(() => m.ack())
+            .catch(() => m.nak())
+        );
+      }
+
+      await Promise.all(promises);
+    } catch (err) {
+      console.error('Consume loop error:', err);
+    }
+      
+	await this.delay(40);
+  }
+}
+
+	private delay(ms: number) {
+  		return new Promise(resolve => setTimeout(resolve, ms));
 	}
 
 	subscribe(handler: HandlerFunction) {
