@@ -12,6 +12,7 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 	private handlers: HandlerFunction[];
 	private started = false;
 	private running = false;
+	private readonly batchSize = 100;
 
 	constructor(
 		private readonly configService: ConfigService
@@ -54,14 +55,12 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
   );
 
   while (this.running) {
-    const messages = await c.fetch({ max_messages: 20 });
+    const messages = await c.fetch({ max_messages: this.batchSize });
 
-    let hasMessages = false;
     try {
       const promises: Promise<void>[] = [];
 
       for await (const m of messages) {
-        hasMessages = true;
         const data = JSON.parse(this.sc.decode(m.data));
 
         promises.push(

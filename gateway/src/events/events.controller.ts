@@ -8,7 +8,7 @@ export class EventsController {
 
   @Post()
   async processEvent(@Req() req: Request, @Res() res: Response) {
-
+   console.log('Received new events')
    return this.eventsService.processRequestBody(req, res);
   }
 }

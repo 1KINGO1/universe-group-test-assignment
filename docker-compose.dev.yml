@@ -25,6 +25,8 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
+    ports: 
+      - "3000:3000"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
       interval: 10s
@@ -45,10 +47,12 @@ services:
       NATS_URL: nats:4222
       DATABASE_URL: postgres://admin:123456@postgres/main
       OUTBOX_POLL_INTERVAL_MS: 500
-      OUTBOX_BATCH_SIZE: 300
+      OUTBOX_BATCH_SIZE: 500
       OUTBOX_MAX_RETRIES: 2
     networks:
       - app-network
+    ports: 
+      - "3001:3000"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
       interval: 10s
@@ -103,6 +107,8 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
+    ports: 
+      - "3002:3000"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
       interval: 10s
@@ -126,6 +132,8 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
+    ports: 
+      - "3003:3000"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
       interval: 10s
@@ -144,7 +152,7 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgres://admin:123456@postgres/main
     ports:
-      - "3000:3000"
+      - "3004:3000"
     networks:
       - app-network
     healthcheck:
@@ -168,7 +176,7 @@ services:
     restart: on-failure
     image: grafana/grafana
     ports:
-      - "3001:3000"
+      - "3005:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
