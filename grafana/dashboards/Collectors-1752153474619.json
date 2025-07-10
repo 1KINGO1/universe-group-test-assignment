@@ -125,10 +125,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "derdqpe48w35se"
-      },
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -227,10 +224,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "derdqpe48w35se"
-      },
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -315,10 +309,7 @@
           "refId": "A"
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "derdqpe48w35se"
-          },
+          "datasource": "Prometheus",
           "editorMode": "code",
           "expr": "rate(ttk_collector_events_processed_total[1m])",
           "hide": false,
