@@ -100,10 +100,7 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "derdqpe48w35se"
-          },
+          "datasource": "Prometheus",
           "editorMode": "code",
           "expr": "rate(fb_collector_events_accepted_total[1m])",
           "legendFormat": "__auto",
@@ -216,10 +213,7 @@
           "refId": "A"
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "derdqpe48w35se"
-          },
+          "datasource": "Prometheus",
           "editorMode": "code",
           "expr": "rate(ttk_collector_events_failed_total[1m])",
           "hide": false,

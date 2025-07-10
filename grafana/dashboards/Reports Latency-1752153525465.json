@@ -115,10 +115,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "derdqpe48w35se"
-      },
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -196,10 +193,7 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "derdqpe48w35se"
-          },
+          "datasource": "Prometheus",
           "editorMode": "code",
           "expr": "sum(rate(reporter_report_latency_seconds_sum{report_type=\"revenue\"}[1m])) \r\n/ \r\nsum(rate(reporter_report_latency_seconds_count{report_type=\"revenue\"}[1m]))",
           "legendFormat": "__auto",
@@ -292,10 +286,7 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "derdqpe48w35se"
-          },
+          "datasource": "Prometheus",
           "editorMode": "code",
           "expr": "sum(rate(reporter_report_latency_seconds_sum{report_type=\"demographic\"}[1m])) \r\n/ \r\nsum(rate(reporter_report_latency_seconds_count{report_type=\"demographic\"}[1m]))",
           "legendFormat": "__auto",
