@@ -3,6 +3,7 @@ import {EventsModule} from './events/events.module';
 import {ConfigModule} from '@nestjs/config';
 import {PrismaModule} from '@kingo1/universe-assignment-shared';
 import { MetricsModule } from './metrics/metrics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
 	imports: [
@@ -11,7 +12,8 @@ import { MetricsModule } from './metrics/metrics.module';
 			isGlobal: true
 		}),
 		PrismaModule,
-		MetricsModule
+		MetricsModule,
+		HealthModule
 	],
 	controllers: [],
 	providers: [],

@@ -3,6 +3,7 @@ import {PrismaModule} from '@kingo1/universe-assignment-shared';
 import {ConfigModule} from '@nestjs/config';
 import { EventCollectorModule } from './event-collector/event-collector.module';
 import {MetricsModule} from './metrics/metrics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
 	imports: [
@@ -11,7 +12,8 @@ import {MetricsModule} from './metrics/metrics.module';
 			isGlobal: true
 		}),
 		EventCollectorModule,
-		MetricsModule
+		MetricsModule,
+		HealthModule
 	],
 })
 export class AppModule {

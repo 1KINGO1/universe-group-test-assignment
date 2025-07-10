@@ -50,11 +50,11 @@ model OutboxEvent {
   eventType  String
   payload    Json
   source     Source
-  createdAt  DateTime     @default(now())
-  sentAt     DateTime?
+  createdAt  DateTime     @default(now()) @map("created_at")
+  sentAt     DateTime? @map("sent_at")
   status     OutboxStatus @default(PENDING)
   error      String?
-  retryCount Int          @default(0)
+  retryCount Int          @default(0) @map("retry_count")
 
   @@index([status])
   @@index([createdAt])

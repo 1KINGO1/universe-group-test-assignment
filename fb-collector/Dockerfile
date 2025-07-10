@@ -30,4 +30,6 @@ RUN npm run prisma:generate
 EXPOSE 3000
 ENV NODE_ENV=production
 
+RUN apk add --no-cache curl
+
 CMD ["node", "dist/main.js"]

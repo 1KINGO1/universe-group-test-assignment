@@ -84,6 +84,10 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
   		return new Promise(resolve => setTimeout(resolve, ms));
 	}
 
+	isConnected(): boolean {
+		return !!this.nc && !this.nc.isClosed();
+	}
+
 	subscribe(handler: HandlerFunction) {
 		this.handlers.push(handler);
 

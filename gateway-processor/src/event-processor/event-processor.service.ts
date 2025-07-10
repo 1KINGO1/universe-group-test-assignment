@@ -60,8 +60,8 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
 
         for (const evt of pending) {
             try {
-                const eventObj = evt.payload as unknown as Event;
-                await this.natsService.publish(evt.source, eventObj);
+                const eventObj = typeof evt.payload === 'string' ? JSON.parse(evt.payload) : evt.payload;
+                await this.natsService.publish(evt.source, eventObj as never as Event);
                 successes.push(evt.id);
             } catch (error) {
                 const retries = (evt.retryCount ?? 0) + 1;

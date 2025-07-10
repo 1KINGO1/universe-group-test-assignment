@@ -50,4 +50,8 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
 			throw err;
 		}
 	}
+
+	isConnected(): boolean {
+    	return !!this.nc && !this.nc.isClosed();
+  	}
 }

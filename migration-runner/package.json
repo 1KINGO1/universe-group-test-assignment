@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@kingo1/universe-assignment-shared": "^1.0.31"
+    "@kingo1/universe-assignment-shared": "^1.0.38"
   },
   "scripts": {
     "prisma:generate": "npx prisma generate --schema=node_modules/@kingo1/universe-assignment-shared/prisma/schema.prisma",

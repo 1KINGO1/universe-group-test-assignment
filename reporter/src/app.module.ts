@@ -5,10 +5,11 @@ import {APP_PIPE} from '@nestjs/core';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {ConfigModule} from '@nestjs/config';
 import {MetricsModule} from './metrics/metrics.module';
+import {HealthModule} from './health/health.module';
 
 @Module({
   // TODO: ConfigModule?
-  imports: [PrismaModule, ReportsModule, ConfigModule.forRoot({isGlobal: true}), MetricsModule],
+  imports: [PrismaModule, ReportsModule, ConfigModule.forRoot({isGlobal: true}), MetricsModule, HealthModule],
   providers: [
     {
       provide: APP_PIPE,
