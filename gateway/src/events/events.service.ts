@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from "@kingo1/universe-assignment-shared";
 import { MetricsService } from 'src/metrics/metrics.service';
 import { Request, Response } from 'express';
@@ -10,54 +10,80 @@ import type { Event } from "@kingo1/universe-assignment-shared";
 import type { Prisma } from '@prisma/client';
 
 @Injectable()
-export class EventsService {
+export class EventsService implements OnModuleDestroy {
 	private readonly logger = new Logger(EventsService.name);
+	private readonly activeRequests = new Set<Promise<void>>();
+	private shuttingDown = false;
 
 	constructor(
 		private readonly prismaService: PrismaService,
 		private readonly metricsService: MetricsService,
-	) {}
+	) {
+	}
 
-	async processRequestBody(req: Request, res: Response) {
-		const worker = new Worker(path.resolve(__dirname, 'batch-processing.worker.js'), {
-			// for development, use ts-node to run TypeScript directly
-			// execArgv: ['-r', 'ts-node/register'],
-		});
-		worker.on('error', err => this.logger.error('Worker error', err));
+	async onModuleDestroy() {
+		this.shuttingDown = true;
+		this.logger.log('Shutting down... waiting for in-flight requests');
 
-		const batchSize = 4000;
-		let batch: Event[] = [];
+		await Promise.allSettled(this.activeRequests);
+		this.logger.log('All in-flight events have been processed.');
+	}
 
-		const pipeline = chain([ req, StreamArray.withParser() ]);
+	async processRequest(req: Request, res: Response) {
+		if (this.shuttingDown) {
+			res.status(503).send('Service is shutting down');
+			return;
+		}
 
-		pipeline.on('data', async ({ value }) => {
-			batch.push(value as Event);
-			if (batch.length >= batchSize) {
-				pipeline.pause();
-				try {
-					const { outboxEvents, failedCount } = await this.processWithWorker(worker, batch);
-					await this.saveBatch(outboxEvents, failedCount);
-				} finally {
-					batch = [];
-					pipeline.resume()
+		const handle = this.handleStreamRequest(req, res);
+		this.activeRequests.add(handle);
+
+		handle.finally(() => this.activeRequests.delete(handle));
+	}
+
+	private async handleStreamRequest(req: Request, res: Response): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const worker = new Worker(path.resolve(__dirname, 'batch-processing.worker.js'));
+			worker.on('error', err => this.logger.error('Worker error', err));
+
+			const batchSize = 4000;
+			let batch: Event[] = [];
+			let totalSize = 0;
+
+			const pipeline = chain([req, StreamArray.withParser()]);
+
+			pipeline.on('data', async ({value}) => {
+				batch.push(value as Event);
+				totalSize++;
+				if (batch.length >= batchSize) {
+					pipeline.pause();
+					try {
+						const {outboxEvents, failedCount} = await this.processWithWorker(worker, batch);
+						await this.saveBatch(outboxEvents, failedCount);
+					} finally {
+						batch = [];
+						pipeline.resume();
+					}
 				}
-			}
-		});
+			});
 
-		pipeline.on('end', async () => {
-			if (batch.length) {
-				const { outboxEvents, failedCount } = await this.processWithWorker(worker, batch);
-				await this.saveBatch(outboxEvents, failedCount);
-			}
-			// 2) Підриваємо воркер
-			await worker.terminate();
-			res.status(200).send('All points processed');
-		});
+			pipeline.on('end', async () => {
+				if (batch.length) {
+					const {outboxEvents, failedCount} = await this.processWithWorker(worker, batch);
+					await this.saveBatch(outboxEvents, failedCount);
+				}
+				await worker.terminate();
+				res.status(200).send('All points processed');
+				this.logger.log('Finished processing events', totalSize)
+				resolve();
+			});
 
-		pipeline.on('error', async err => {
-			this.logger.error(err);
-			await worker.terminate();
-			res.status(500).send('Failed to process');
+			pipeline.on('error', async err => {
+				this.logger.error(err);
+				await worker.terminate();
+				res.status(500).send('Failed to process');
+				reject();
+			});
 		});
 	}
 

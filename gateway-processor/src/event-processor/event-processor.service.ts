@@ -9,6 +9,7 @@ import {MetricsService} from '../metrics/metrics.service';
 export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(EventProcessorService.name);
     private polling = true;
+    private currentBatchPromise: Promise<void> | null = null;
     private readonly POLL_INTERVAL_MS;
     private readonly BATCH_SIZE;
     private readonly MAX_RETRIES;
@@ -33,18 +34,31 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     async onModuleDestroy() {
         this.logger.log('Stopping outbox event processor...');
         this.polling = false;
+
+        if (this.currentBatchPromise) {
+            this.logger.log('Waiting for current batch to finish...');
+            try {
+                await this.currentBatchPromise;
+                this.logger.log('Current batch completed');
+            } catch (err) {
+                this.logger.error('Error during final batch:', err.message);
+            }
+        }
+
+        this.logger.log('Outbox event processor stopped');
     }
 
     private async processLoop() {
         while (this.polling) {
             try {
-                await this.processBatch();
+                this.currentBatchPromise = this.processBatch();
+                await this.currentBatchPromise;
             } catch (err) {
                 this.logger.error(`Batch processing error: ${err.message}`);
             }
             await this.delay(this.POLL_INTERVAL_MS);
         }
-    }
+    }   
 
     private async processBatch() {
         const pending = await this.prisma.outboxEvent.findMany({

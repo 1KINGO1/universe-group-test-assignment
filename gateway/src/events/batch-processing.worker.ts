@@ -18,7 +18,7 @@ parentPort!.on('message', (events: Event[]) => {
 			sentAt: new Date(event.timestamp),
 			source: event.source,
 			eventType: event.eventType,
-			payload: JSON.stringify(event.data),
+			payload: JSON.stringify(event),
 		};
 
 		if (!isValid) {

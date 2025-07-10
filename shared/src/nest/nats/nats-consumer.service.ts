@@ -1,7 +1,7 @@
-import {Injectable, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
-import {AckPolicy, connect, NatsConnection, StringCodec} from 'nats';
-import {Event} from '../../types';
-import {ConfigService} from '@nestjs/config';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { AckPolicy, connect, NatsConnection, StringCodec } from 'nats';
+import { Event } from '../../types';
+import { ConfigService } from '@nestjs/config';
 
 type HandlerFunction = (data: Event) => Promise<void>;
 
@@ -9,20 +9,19 @@ type HandlerFunction = (data: Event) => Promise<void>;
 export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 	private nc: NatsConnection;
 	private sc = StringCodec();
-	private handlers: HandlerFunction[];
+	private handlers: HandlerFunction[] = [];
 	private started = false;
 	private running = false;
 	private readonly batchSize = 100;
+	private readonly activePromises = new Set<Promise<void>>();
 
 	constructor(
 		private readonly configService: ConfigService
-	) {
-	}
+	) {}
 
 	async onModuleInit() {
-		this.handlers = [];
 		this.running = true;
-		this.nc = await connect({servers: `nats://${this.configService.getOrThrow("NATS_URL")}`});
+		this.nc = await connect({ servers: `nats://${this.configService.getOrThrow("NATS_URL")}` });
 		console.log('Connected to NATS');
 
 		const jsm = await this.nc.jetstreamManager();
@@ -43,44 +42,50 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 
 	async onModuleDestroy() {
 		this.running = false;
+
+		console.log('Waiting for in-flight events to finish...');
+		await Promise.allSettled(this.activePromises);
+
 		await this.nc.close();
 		console.log('Disconnected from NATS');
 	}
 
 	private async consumeLoop() {
-  const js = this.nc.jetstream();
-  const c = await js.consumers.get(
-    this.configService.getOrThrow("NATS_STREAM"),
-    this.configService.getOrThrow("NATS_CONSUMER"),
-  );
+		const js = this.nc.jetstream();
+		const c = await js.consumers.get(
+			this.configService.getOrThrow("NATS_STREAM"),
+			this.configService.getOrThrow("NATS_CONSUMER"),
+		);
 
-  while (this.running) {
-    const messages = await c.fetch({ max_messages: this.batchSize });
+		while (this.running) {
+			const messages = await c.fetch({ max_messages: this.batchSize });
 
-    try {
-      const promises: Promise<void>[] = [];
+			try {
+				for await (const m of messages) {
+					const data = JSON.parse(this.sc.decode(m.data));
 
-      for await (const m of messages) {
-        const data = JSON.parse(this.sc.decode(m.data));
+					const promise = Promise.all(
+						this.handlers.map(handler => handler(data))
+					)
+						.then(() => m.ack())
+						.catch((err) => {
+							console.error('Handler error:', err);
+							m.nak();
+						})
+						.finally(() => this.activePromises.delete(promise));
 
-        promises.push(
-          Promise.all(this.handlers.map(handler => handler(data)))
-            .then(() => m.ack())
-            .catch(() => m.nak())
-        );
-      }
+					this.activePromises.add(promise);
+				}
+			} catch (err) {
+				console.error('Consume loop error:', err);
+			}
 
-      await Promise.all(promises);
-    } catch (err) {
-      console.error('Consume loop error:', err);
-    }
-      
-	await this.delay(40);
-  }
-}
+			await this.delay(40);
+		}
+	}
 
 	private delay(ms: number) {
-  		return new Promise(resolve => setTimeout(resolve, ms));
+		return new Promise(resolve => setTimeout(resolve, ms));
 	}
 
 	isConnected(): boolean {

@@ -14,6 +14,7 @@ services:
 
   gateway:
     restart: on-failure
+    stop_grace_period: 120s
     depends_on:
       - nats
       - prisma-migrate
@@ -37,6 +38,7 @@ services:
 
   gateway-processor:
     restart: on-failure
+    stop_grace_period: 120s
     depends_on:
       - nats
       - prisma-migrate
@@ -94,6 +96,7 @@ services:
 
   fb-collector:
     restart: on-failure
+    stop_grace_period: 120s
     depends_on:
       - prisma-migrate
       - nats
@@ -119,6 +122,7 @@ services:
 
   ttk-collector:
     restart: on-failure
+    stop_grace_period: 120s
     depends_on:
       - prisma-migrate
       - nats
@@ -180,6 +184,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
     networks:
       - app-network
 
@@ -197,3 +202,4 @@ networks:
 volumes:
   nats-data:
   postgres-data:
+  grafana-data:

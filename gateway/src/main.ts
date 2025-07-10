@@ -8,7 +8,7 @@ async function bootstrap() {
   });
 
   // app.use(bodyParser.json({ limit: '20mb' }));
-
+  app.enableShutdownHooks();
   await app.listen(3000);
 }
 bootstrap();
