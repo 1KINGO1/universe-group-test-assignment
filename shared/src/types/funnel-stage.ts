@@ -1,1 +1,1 @@
-export type FunnelStage = "top" | "bottom";
+export type FunnelStage = 'top' | 'bottom'

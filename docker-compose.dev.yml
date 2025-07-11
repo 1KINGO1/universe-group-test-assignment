@@ -1,4 +1,4 @@
-version: "3.8"
+version: '3.8'
 
 services:
   publisher:
@@ -10,7 +10,6 @@ services:
       EVENT_ENDPOINT: http://gateway:3000/events
     networks:
       - app-network
-
 
   gateway:
     restart: on-failure
@@ -26,15 +25,14 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports: 
-      - "3000:3000"
+    ports:
+      - '3000:3000'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 15s
-
 
   gateway-processor:
     restart: on-failure
@@ -53,31 +51,25 @@ services:
       OUTBOX_MAX_RETRIES: 2
     networks:
       - app-network
-    ports: 
-      - "3001:3000"
+    ports:
+      - '3001:3000'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 15s
 
-
   nats:
     restart: on-failure
     image: nats:latest
-    command: [
-      "--jetstream",
-      "--store_dir", "/data/jetstream",
-      "-m", "8222"
-    ]
+    command: ['--jetstream', '--store_dir', '/data/jetstream', '-m', '8222']
     ports:
-      - "8222:8222"
+      - '8222:8222'
     volumes:
       - nats-data:/data/jetstream
     networks:
       - app-network
-
 
   postgres:
     restart: on-failure
@@ -87,12 +79,11 @@ services:
       POSTGRES_PASSWORD: '123456'
       POSTGRES_DB: main
     ports:
-      - "5050:5432"
+      - '5050:5432'
     networks:
       app-network:
     volumes:
       - postgres-data:/var/lib/postgresql/data
-
 
   fb-collector:
     restart: on-failure
@@ -110,15 +101,14 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports: 
-      - "3002:3000"
+    ports:
+      - '3002:3000'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 15s
-
 
   ttk-collector:
     restart: on-failure
@@ -136,15 +126,14 @@ services:
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports: 
-      - "3003:3000"
+    ports:
+      - '3003:3000'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 15s
-
 
   reporter:
     restart: on-failure
@@ -156,11 +145,11 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgres://admin:123456@postgres/main
     ports:
-      - "3004:3000"
+      - '3004:3000'
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health/liveness" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
       interval: 10s
       timeout: 3s
       retries: 3
@@ -172,7 +161,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090"
+      - '9090:9090'
     networks:
       - app-network
 
@@ -180,7 +169,7 @@ services:
     restart: on-failure
     image: grafana/grafana
     ports:
-      - "3005:3000"
+      - '3005:3000'
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards

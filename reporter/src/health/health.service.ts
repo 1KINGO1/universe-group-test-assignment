@@ -1,19 +1,20 @@
-import {Injectable, ServiceUnavailableException} from '@nestjs/common';
-import {NatsConsumerService, PrismaService} from '@kingo1/universe-assignment-shared';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common'
+import {
+  NatsConsumerService,
+  PrismaService,
+} from '@kingo1/universe-assignment-shared'
 
 @Injectable()
 export class HealthService {
-	constructor(
-		private readonly prismaService: PrismaService,
-	) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
-	async checkReadiness() {
-		const dbOk = await this.prismaService.$queryRaw`SELECT 1`;
+  async checkReadiness() {
+    const dbOk = await this.prismaService.$queryRaw`SELECT 1`
 
-		const isAppReady = dbOk;
+    const isAppReady = dbOk
 
-		if (!isAppReady) throw new ServiceUnavailableException();
+    if (!isAppReady) throw new ServiceUnavailableException()
 
-		return {status: "ready"};
-	}
+    return { status: 'ready' }
+  }
 }

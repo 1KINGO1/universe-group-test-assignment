@@ -1,20 +1,20 @@
-import { Prisma } from '@prisma/client';
-import type { Event } from "@kingo1/universe-assignment-shared";
+import { Prisma } from '@prisma/client'
+import type { Event } from '@kingo1/universe-assignment-shared'
 
 export interface ProcessResult {
-	outboxEvents: Prisma.OutboxEventCreateManyInput[];
+  outboxEvents: Prisma.OutboxEventCreateManyInput[]
 }
 
 export function processEvents(events: Event[]): ProcessResult {
-	const outboxEvents: ProcessResult['outboxEvents'] = [];
+  const outboxEvents: ProcessResult['outboxEvents'] = []
 
-	for (const event of events) {
-		const base: Omit<Prisma.OutboxEventCreateManyInput, 'status' | 'error'> = {
-			payload: JSON.stringify(event),
-		};
+  for (const event of events) {
+    const base: Omit<Prisma.OutboxEventCreateManyInput, 'status' | 'error'> = {
+      payload: JSON.stringify(event),
+    }
 
-		outboxEvents.push(base);
-	}
+    outboxEvents.push(base)
+  }
 
-	return { outboxEvents };
+  return { outboxEvents }
 }

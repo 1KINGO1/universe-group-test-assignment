@@ -1,13 +1,13 @@
 {
   "compilerOptions": {
-    "target": "ES2020",               // Сучасний стандарт JS
-    "module": "CommonJS",             // Підходить для Node.js
-    "outDir": "dist",                 // Папка для скомпільованих файлів
-    "rootDir": "src",                 // Папка з вихідним кодом
-    "strict": true,                   // Включає строгі перевірки
-    "esModuleInterop": true,          // Для сумісності з CommonJS модулями
+    "target": "ES2020", // Сучасний стандарт JS
+    "module": "CommonJS", // Підходить для Node.js
+    "outDir": "dist", // Папка для скомпільованих файлів
+    "rootDir": "src", // Папка з вихідним кодом
+    "strict": true, // Включає строгі перевірки
+    "esModuleInterop": true, // Для сумісності з CommonJS модулями
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true              // Пропускає перевірку типів у бібліотеках (швидше компіляція)
+    "skipLibCheck": true // Пропускає перевірку типів у бібліотеках (швидше компіляція)
   },
   "include": ["src/**/*"]
 }

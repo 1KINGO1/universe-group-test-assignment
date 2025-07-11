@@ -1,6 +1,6 @@
-import {Controller, Post, Req, Res} from '@nestjs/common';
-import { EventsService } from './events.service';
-import {Request, Response} from 'express';
+import { Controller, Post, Req, Res } from '@nestjs/common'
+import { EventsService } from './events.service'
+import { Request, Response } from 'express'
 
 @Controller('events')
 export class EventsController {
@@ -8,7 +8,7 @@ export class EventsController {
 
   @Post()
   async processEvent(@Req() req: Request, @Res() res: Response) {
-   console.log('Controller: Received new events')
-   return this.eventsService.processRequest(req, res);
+    console.log('Controller: Received new events')
+    return this.eventsService.processRequest(req, res)
   }
 }
