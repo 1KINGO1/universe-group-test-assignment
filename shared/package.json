@@ -1,6 +1,6 @@
 {
   "name": "@kingo1/universe-assignment-shared",
-  "version": "1.1.4",
+  "version": "1.1.19",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,6 +26,7 @@
     "prisma": "^6.11.1"
   },
   "devDependencies": {
+    "@types/node": "^24.0.13",
     "typescript": "^5.8.3"
   }
 }

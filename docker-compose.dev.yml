@@ -53,8 +53,8 @@ services:
       NODE_ENV: development
       NATS_URL: nats:4222
       DATABASE_URL: postgres://admin:123456@postgres/main
-      OUTBOX_POLL_INTERVAL_MS: 500
-      OUTBOX_BATCH_SIZE: 500
+      OUTBOX_POLL_INTERVAL_MS: 100
+      OUTBOX_BATCH_SIZE: 1000
       OUTBOX_MAX_RETRIES: 2
     command: sh -c "npm install && npm run start:dev"
     networks:
@@ -101,6 +101,7 @@ services:
       - /app/node_modules
     depends_on:
       - prisma-migrate
+      - gateway-processor
       - nats
     build:
       context: fb-collector
@@ -127,6 +128,7 @@ services:
     stop_grace_period: 120s
     depends_on:
       - prisma-migrate
+      - gateway-processor
       - nats
     build:
       context: ttk-collector

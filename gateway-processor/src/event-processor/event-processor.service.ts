@@ -131,7 +131,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         type: "EVENTS",
         msg: `Sent ${successes.length} outbox events successfully`,
         successCount: successes.length,
-        eventIds: successes,
+        outboxEventIds: successes,
         timestamp: new Date().toISOString(),
       })
     }

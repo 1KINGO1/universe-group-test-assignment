@@ -83,6 +83,7 @@ services:
     depends_on:
       - prisma-migrate
       - nats
+      - gateway-processor
       - postgres
     build:
       context: fb-collector
@@ -107,6 +108,7 @@ services:
     depends_on:
       - prisma-migrate
       - nats
+      - gateway-processor
       - postgres
     build:
       context: ttk-collector
