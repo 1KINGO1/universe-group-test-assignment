@@ -4,6 +4,7 @@ import { PrismaService } from '@kingo1/universe-assignment-shared'
 import { Request, Response } from 'express'
 import { Worker } from 'worker_threads'
 import { MetricsService } from '../metrics/metrics.service'
+import {Logger} from 'nestjs-pino';
 
 // Mock MetricsService
 jest.mock('src/metrics/metrics.service', () => ({
@@ -61,6 +62,11 @@ describe('EventsService', () => {
     processedEventsCounter: { inc: jest.fn() },
   }
 
+  const mockLoggerService = {
+    log: jest.fn(),
+    error: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -73,6 +79,10 @@ describe('EventsService', () => {
           provide: MetricsService,
           useValue: mockMetricsService,
         },
+        {
+          provide: Logger,
+          useValue: mockLoggerService,
+        }
       ],
     }).compile()
 
@@ -96,8 +106,8 @@ describe('EventsService', () => {
 
   describe('onModuleDestroy', () => {
     it('should set shuttingDown flag and wait for active requests', async () => {
-      const mockPromise = Promise.resolve()
-      ;(service as any).activeRequests.add(mockPromise)
+      const mockPromise = Promise.resolve();
+			(service as any).activeRequests.add(mockPromise)
 
       await service.onModuleDestroy()
 
@@ -274,11 +284,14 @@ describe('EventsService', () => {
 
   describe('processWithWorker', () => {
     it('should process events with worker successfully', async () => {
+			const events = [{ id: '1', data: 'test' }]
+			const requestId = 'test-request-id'
+
       const mockWorker = {
         on: jest.fn(),
         once: jest.fn((event, callback) => {
           if (event === 'message') {
-            setTimeout(() => callback({ outboxEvents: [{ id: '1' }] }), 0)
+            setTimeout(() => callback({ outboxEvents: [{...events[0], requestId}] }), 0)
           }
         }),
         off: jest.fn(),
@@ -286,13 +299,13 @@ describe('EventsService', () => {
         terminate: jest.fn(),
       }
 
-      const events = [{ id: '1', data: 'test' }]
       const processWithWorker = (service as any).processWithWorker.bind(service)
 
-      const result = await processWithWorker(mockWorker, events)
+      const result = await processWithWorker(mockWorker, events, requestId)
+			console.log(result);
 
-      expect(result).toEqual({ outboxEvents: [{ id: '1' }] })
-      expect(mockWorker.postMessage).toHaveBeenCalledWith(events)
+      expect(result).toEqual({ outboxEvents: [{...events[0], requestId}] })
+      expect(mockWorker.postMessage).toHaveBeenCalledWith({events, requestId})
     })
 
     it('should handle worker error', async () => {
@@ -307,14 +320,14 @@ describe('EventsService', () => {
         postMessage: jest.fn(),
         terminate: jest.fn(),
       }
-
+			const requestId = 'test-request-id'
       const events = [{ id: '1', data: 'test' }]
       const processWithWorker = (service as any).processWithWorker.bind(service)
 
-      await expect(processWithWorker(mockWorker, events)).rejects.toThrow(
+      await expect(processWithWorker(mockWorker, events, requestId)).rejects.toThrow(
         'Worker error',
       )
-      expect(mockWorker.postMessage).toHaveBeenCalledWith(events)
+      expect(mockWorker.postMessage).toHaveBeenCalledWith({events, requestId})
     })
 
     it('should cleanup event listeners', async () => {
@@ -377,42 +390,36 @@ describe('EventsService', () => {
     it('should handle database error', async () => {
       const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }]
 
-      const dbError = new Error('Database error')
-      ;(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
+      const dbError = new Error('Database error');
+			(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
         dbError,
       )
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+			const requestId = 'test-request-id'
 
       const saveBatch = (service as any).saveBatch.bind(service)
-      await saveBatch(outboxEvents)
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Error during saving to DB',
-        dbError,
-      )
+			await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
+      expect(mockLoggerService.error).toHaveBeenCalled()
       expect(metricsService.failedEventsCounter.inc).toHaveBeenCalledWith(1)
       expect(metricsService.processedEventsCounter.inc).toHaveBeenCalledWith(1)
       expect(metricsService.acceptedEventsCounter.inc).not.toHaveBeenCalled()
-
-      consoleSpy.mockRestore()
     })
 
     it('should always increment processed counter', async () => {
-      const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }]
+      const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }];
 
-      ;(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
-        new Error('DB Error'),
+			const dbError = new Error('DB Error');
+
+			(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
+				dbError,
       )
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+			const requestId = 'test-request-id'
 
       const saveBatch = (service as any).saveBatch.bind(service)
-      await saveBatch(outboxEvents)
 
+			await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
+			expect(mockLoggerService.error).toHaveBeenCalled()
       expect(metricsService.processedEventsCounter.inc).toHaveBeenCalledWith(1)
-
-      consoleSpy.mockRestore()
     })
   })
 

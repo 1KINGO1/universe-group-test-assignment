@@ -10,6 +10,7 @@ import type { Event } from '@kingo1/universe-assignment-shared'
 import type { Prisma } from '@prisma/client'
 import { v4 as uuidv4 } from 'uuid';
 import { Logger } from 'nestjs-pino'
+import {ProcessResult} from './utils/process-events';
 
 @Injectable()
 export class EventsService implements OnModuleDestroy {
@@ -106,7 +107,7 @@ export class EventsService implements OnModuleDestroy {
     requestId: string
   ): Promise<{ outboxEvents: Prisma.OutboxEventCreateManyInput[] }> {
     return new Promise((resolve, reject) => {
-      const onMessage = (msg: any) => {
+      const onMessage = (msg: ProcessResult) => {
         cleanup()
         resolve(msg)
       }
@@ -144,7 +145,7 @@ export class EventsService implements OnModuleDestroy {
         'Saved events batch'
       )
     } catch (e) {
-      this.logger.log(
+      this.logger.error(
         {
           type: "EVENTS",
           correlationId: requestId,

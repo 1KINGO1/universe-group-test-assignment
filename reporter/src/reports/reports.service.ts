@@ -9,7 +9,6 @@ import { RevenueReport } from './dtos/revenue-report.dto'
 import { DemographicsReport } from './dtos/demographics-report.dto'
 import { MetricsService } from '../metrics/metrics.service'
 
-// TODO: Move it somewhere else
 type Event = FacebookEventType | TiktokEventType
 const REVENUE_EVENTS: Event[] = ['purchase', 'checkout.complete']
 

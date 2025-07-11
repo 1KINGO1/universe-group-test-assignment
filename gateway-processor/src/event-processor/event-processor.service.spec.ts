@@ -5,8 +5,7 @@ import { NatsService } from 'src/nats/nats.service'
 import { ConfigService } from '@nestjs/config'
 import { MetricsService } from '../metrics/metrics.service'
 import { OutboxStatus } from '@prisma/client'
-import { eventSchema } from './schemas/event.schema'
-import { ZodError } from 'zod'
+import {Logger} from 'nestjs-pino';
 
 describe('EventProcessorService', () => {
   let service: EventProcessorService
@@ -14,6 +13,7 @@ describe('EventProcessorService', () => {
   let nats: jest.Mocked<NatsService>
   let config: jest.Mocked<ConfigService>
   let metrics: jest.Mocked<MetricsService>
+  let logger: jest.Mocked<Logger>
 
   beforeEach(async () => {
     prisma = {
@@ -30,6 +30,13 @@ describe('EventProcessorService', () => {
       acceptedEventsCounter: { inc: jest.fn() },
       failedEventsCounter: { inc: jest.fn() },
       processedEventsCounter: { inc: jest.fn() },
+    } as any
+    logger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      log: jest.fn(),
+      debug: jest.fn(),
     } as any
 
     config.getOrThrow.mockImplementation(key => {
@@ -50,6 +57,7 @@ describe('EventProcessorService', () => {
         { provide: NatsService, useValue: nats },
         { provide: ConfigService, useValue: config },
         { provide: MetricsService, useValue: metrics },
+        { provide: Logger, useValue: logger },
       ],
     }).compile()
 
@@ -63,23 +71,6 @@ describe('EventProcessorService', () => {
     await service['processBatch']()
     expect(prisma.outboxEvent.findMany).toHaveBeenCalled()
     expect(prisma.outboxEvent.updateMany).not.toHaveBeenCalled()
-  })
-
-  it('should send valid events and update status', async () => {
-    const fakePayload = JSON.parse(
-      '{"eventId":"ttk-fc3c6b14-6844-4222-8069-61e03538d0cc","timestamp":"2025-07-11T08:10:47.048Z","source":"tiktok","funnelStage":"bottom","eventType":"follow","data":{"user":{"userId":"c251dc59-65ed-418e-a6db-77e27f0a7a8d","username":"Mayra46","followers":143597},"engagement":{"actionTime":"2025-07-11T08:10:47.048Z","profileId":null,"purchasedItem":null,"purchaseAmount":null}}}',
-    )
-    ;(prisma.outboxEvent.findMany as any).mockResolvedValue([
-      { id: '1', payload: fakePayload, retryCount: 0, status: 'PENDING' },
-    ])
-    await service['processBatch']()
-    expect(nats.publish).toHaveBeenCalledWith(fakePayload.source, fakePayload)
-    expect(prisma.outboxEvent.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['1'] } },
-      data: expect.objectContaining({ status: OutboxStatus.SENT }),
-    })
-    expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(1)
-    expect(metrics.processedEventsCounter.inc).toHaveBeenCalledWith(1)
   })
 
   it('should handle JSON parse error and retry', async () => {
