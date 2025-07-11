@@ -61,7 +61,7 @@ export class EventCollectorService implements OnModuleInit {
         this.metricsService.acceptedEventsCounter.inc()
       } catch (err) {
         this.metricsService.failedEventsCounter.inc()
-        console.log('Catched error:', err)
+        this.logger.error('Catched error:', err)
         throw err
       } finally {
         this.metricsService.processedEventsCounter.inc()

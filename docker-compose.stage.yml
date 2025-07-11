@@ -2,197 +2,164 @@ version: '3.8'
 
 services:
   publisher:
-    restart: on-failure
+    restart: unless-stopped
     depends_on:
       - gateway
-    image: andriiuni/events
+    image: andriiuni/events:latest
     environment:
       EVENT_ENDPOINT: http://gateway:3000/events
     networks:
       - app-network
 
   gateway:
-    restart: on-failure
-    stop_grace_period: 120s
+    restart: unless-stopped
     depends_on:
       - nats
       - prisma-migrate
+      - postgres
     build:
       context: gateway
-    volumes:
-      - ./gateway:/app
-      - /app/node_modules
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NATS_URL: nats:4222
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports:
-      - '3000:3000'
-    command: sh -c "npm install && npm run start:dev"
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   gateway-processor:
-    restart: on-failure
-    stop_grace_period: 120s
+    restart: unless-stopped
     depends_on:
       - nats
       - prisma-migrate
+      - postgres
     build:
       context: gateway-processor
-    volumes:
-      - ./gateway-processor:/app
-      - /app/node_modules
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NATS_URL: nats:4222
       DATABASE_URL: postgres://admin:123456@postgres/main
       OUTBOX_POLL_INTERVAL_MS: 500
       OUTBOX_BATCH_SIZE: 500
       OUTBOX_MAX_RETRIES: 2
-    command: sh -c "npm install && npm run start:dev"
     networks:
       - app-network
-    ports:
-      - '3001:3000'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   nats:
-    restart: on-failure
+    restart: unless-stopped
     image: nats:latest
     command: ['--jetstream', '--store_dir', '/data/jetstream', '-m', '8222']
-    ports:
-      - '8222:8222'
     volumes:
       - nats-data:/data/jetstream
     networks:
       - app-network
 
   postgres:
-    restart: on-failure
+    restart: unless-stopped
     image: postgres:latest
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: '123456'
       POSTGRES_DB: main
-    ports:
-      - '5050:5432'
-    networks:
-      app-network:
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
 
   fb-collector:
-    restart: on-failure
-    stop_grace_period: 120s
-    volumes:
-      - ./fb-collector:/app
-      - /app/node_modules
+    restart: unless-stopped
     depends_on:
       - prisma-migrate
       - nats
+      - postgres
     build:
       context: fb-collector
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NATS_URL: nats:4222
       NATS_STREAM: FACEBOOK
       NATS_CONSUMER: fb-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports:
-      - '3002:3000'
-    command: sh -c "npm install && npm run start:dev"
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   ttk-collector:
-    restart: on-failure
-    stop_grace_period: 120s
+    restart: unless-stopped
     depends_on:
       - prisma-migrate
       - nats
+      - postgres
     build:
       context: ttk-collector
-    command: sh -c "npm install && npm run start:dev"
-    volumes:
-      - ./ttk-collector:/app
-      - /app/node_modules
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NATS_URL: nats:4222
       NATS_STREAM: TIKTOK
       NATS_CONSUMER: ttk-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
-    ports:
-      - '3003:3000'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   reporter:
-    restart: on-failure
+    restart: unless-stopped
     depends_on:
       - prisma-migrate
+      - postgres
     build:
       context: reporter
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DATABASE_URL: postgres://admin:123456@postgres/main
-    ports:
-      - '3004:3000'
     networks:
       - app-network
-    volumes:
-      - ./reporter:/app
-      - /app/node_modules
-    command: sh -c "npm install && npm run start:dev"
+    ports:
+      - '3000:3000'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health/liveness']
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   prometheus:
-    restart: on-failure
-    image: prom/prometheus
+    restart: unless-stopped
+    image: prom/prometheus:latest
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - '9090:9090'
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - app-network
 
   grafana:
-    restart: on-failure
-    image: grafana/grafana
+    restart: unless-stopped
+    image: grafana/grafana:latest
     ports:
-      - '3005:3000'
+      - '3001:3000'
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     networks:
       - app-network
@@ -206,9 +173,10 @@ services:
     networks:
       - app-network
 
-networks:
-  app-network:
 volumes:
   nats-data:
   postgres-data:
   grafana-data:
+
+networks:
+  app-network:

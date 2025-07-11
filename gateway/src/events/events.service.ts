@@ -152,7 +152,8 @@ export class EventsService implements OnModuleDestroy {
         },
         'Error during saving batch to DB'
       )
-      this.metricsService.failedEventsCounter.inc(outboxEvents.length)
+      this.metricsService.failedEventsCounter.inc(outboxEvents.length);
+      throw e;
     } finally {
       this.metricsService.processedEventsCounter.inc(outboxEvents.length)
     }

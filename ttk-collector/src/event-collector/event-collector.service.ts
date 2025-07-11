@@ -5,6 +5,7 @@ import {
   TiktokEvent,
 } from '@kingo1/universe-assignment-shared'
 import { MetricsService } from '../metrics/metrics.service'
+import { Logger } from 'nestjs-pino'
 
 @Injectable()
 export class EventCollectorService implements OnModuleInit {
@@ -12,6 +13,7 @@ export class EventCollectorService implements OnModuleInit {
     private readonly natsService: NatsConsumerService,
     private readonly prismaService: PrismaService,
     private readonly metricsService: MetricsService,
+    private readonly logger: Logger
   ) {}
 
   async onModuleInit() {
@@ -52,7 +54,7 @@ export class EventCollectorService implements OnModuleInit {
         this.metricsService.acceptedEventsCounter.inc()
       } catch (err) {
         this.metricsService.failedEventsCounter.inc()
-        console.error('Caught error:', err)
+        this.logger.error('Caught error:', err)
         throw err
       } finally {
         this.metricsService.processedEventsCounter.inc()
