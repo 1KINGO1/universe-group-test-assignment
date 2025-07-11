@@ -2,7 +2,12 @@ import { parentPort } from 'worker_threads'
 import { processEvents } from './utils/process-events'
 import { Event } from '@kingo1/universe-assignment-shared'
 
-parentPort!.on('message', (events: Event[]) => {
-  const result = processEvents(events)
+interface IncomeMessage {
+  events: Event[], 
+  requestId: string
+}
+
+parentPort!.on('message', ({events, requestId}: IncomeMessage) => {
+  const result = processEvents(events, requestId)
   parentPort!.postMessage(result)
 })

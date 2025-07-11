@@ -47,12 +47,15 @@ model Event {
 
 model OutboxEvent {
   id         String       @id @default(uuid())
+  requestId  String       @map("request_id")
+
   payload    Json
-  createdAt  DateTime     @default(now()) @map("created_at")
-  sentAt     DateTime?    @map("sent_at")
   status     OutboxStatus @default(PENDING)
   error      String?
   retryCount Int          @default(0) @map("retry_count")
+
+  createdAt  DateTime     @default(now()) @map("created_at")
+  sentAt     DateTime?    @map("sent_at")
 
   @@index([status])
   @@index([createdAt])

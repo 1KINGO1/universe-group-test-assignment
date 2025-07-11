@@ -1,8 +1,7 @@
 import {
   Injectable,
   OnModuleInit,
-  OnModuleDestroy,
-  Logger,
+  OnModuleDestroy
 } from '@nestjs/common'
 import { PrismaService, Event } from '@kingo1/universe-assignment-shared'
 import { NatsService } from 'src/nats/nats.service'
@@ -11,10 +10,10 @@ import { ConfigService } from '@nestjs/config'
 import { MetricsService } from '../metrics/metrics.service'
 import { eventSchema } from './schemas/event.schema'
 import { ZodError } from 'zod'
+import { Logger } from 'nestjs-pino'
 
 @Injectable()
 export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(EventProcessorService.name)
   private polling = true
   private currentBatchPromise: Promise<void> | null = null
   private readonly POLL_INTERVAL_MS
@@ -26,6 +25,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     private readonly natsService: NatsService,
     private readonly configService: ConfigService,
     private readonly metricsService: MetricsService,
+    private readonly logger: Logger
   ) {
     this.POLL_INTERVAL_MS = parseInt(
       this.configService.getOrThrow('OUTBOX_POLL_INTERVAL_MS'),
@@ -77,7 +77,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     const pending = await this.prisma.outboxEvent.findMany({
       where: { status: OutboxStatus.PENDING },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, payload: true, retryCount: true },
+      select: { id: true, payload: true, retryCount: true, requestId: true },
       take: this.BATCH_SIZE,
     })
     if (!pending.length) return
@@ -95,6 +95,8 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         await this.natsService.publish(
           eventObj.source,
           eventObj as never as Event,
+          evt.id,
+          evt.requestId
         )
         successes.push(evt.id)
       } catch (error) {
@@ -125,6 +127,13 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
       })
       this.logger.log(`Sent ${successes.length} outbox events`)
       this.metricsService.acceptedEventsCounter.inc(successes.length)
+      this.logger.log({
+        type: "EVENTS",
+        msg: `Sent ${successes.length} outbox events successfully`,
+        successCount: successes.length,
+        eventIds: successes,
+        timestamp: new Date().toISOString(),
+      })
     }
 
     if (failures.length) {
@@ -139,6 +148,18 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         })
       })
       await this.prisma.$transaction(ops)
+      this.logger.error({
+        type: "EVENTS",
+        msg: `Failed to send ${failures.length} outbox events`,
+        failureCount: failures.length,
+        failedEvents: failures.map(f => ({
+          id: f.id,
+          retries: f.retries,
+          status: f.retries >= this.MAX_RETRIES ? OutboxStatus.FAILED : OutboxStatus.PENDING,
+          error: f.error,
+        })),
+        timestamp: new Date().toISOString(),
+      })
       this.metricsService.failedEventsCounter.inc(failures.length)
     }
 

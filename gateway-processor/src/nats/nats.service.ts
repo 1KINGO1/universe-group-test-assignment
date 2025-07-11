@@ -2,12 +2,14 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import {
   connect,
   JetStreamClient,
+  MsgHdrsImpl,
   NatsConnection,
   StorageType,
   StringCodec,
 } from 'nats'
 import { Event } from '@kingo1/universe-assignment-shared'
 import { ConfigService } from '@nestjs/config'
+import { Logger } from 'nestjs-pino'
 
 @Injectable()
 export class NatsService implements OnModuleInit, OnModuleDestroy {
@@ -15,7 +17,10 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
   private sc = StringCodec()
   private js: JetStreamClient
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly logger: Logger
+  ) {}
 
   async onModuleInit() {
     this.nc = await connect({
@@ -37,16 +42,20 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
     })
 
     this.js = this.nc.jetstream()
-    console.log('Connected to NATS')
+    this.logger.log('Connected to NATS')
   }
 
   async onModuleDestroy() {
     await this.nc.close()
-    console.log('Disconnected from NATS')
+    this.logger.log('Disconnected from NATS')
   }
 
-  async publish(subject: string, message: Event) {
+  async publish(subject: string, message: Event, outboxEventId: string, requestId: string) {
     const msgString = JSON.stringify(message)
+
+    const headers = new MsgHdrsImpl()
+    headers.set('outboxEventId', outboxEventId)
+    headers.set('requestId', requestId)
 
     try {
       return await this.js.publish(
@@ -54,10 +63,11 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
         this.sc.encode(msgString),
         {
           timeout: 5000,
+          headers
         },
       )
     } catch (err) {
-      console.error('Failed to publish message:', err, message)
+      this.logger.error('Failed to publish message:', err, message)
       throw err
     }
   }

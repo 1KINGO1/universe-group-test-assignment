@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common'
+import { Injectable, OnModuleDestroy } from '@nestjs/common'
 import { PrismaService } from '@kingo1/universe-assignment-shared'
 import { MetricsService } from 'src/metrics/metrics.service'
 import { Request, Response } from 'express'
@@ -8,16 +8,18 @@ import { Worker } from 'worker_threads'
 import * as path from 'path'
 import type { Event } from '@kingo1/universe-assignment-shared'
 import type { Prisma } from '@prisma/client'
+import { v4 as uuidv4 } from 'uuid';
+import { Logger } from 'nestjs-pino'
 
 @Injectable()
 export class EventsService implements OnModuleDestroy {
-  private readonly logger = new Logger(EventsService.name)
   private readonly activeRequests = new Set<Promise<void>>()
   private shuttingDown = false
 
   constructor(
     private readonly prismaService: PrismaService,
     private readonly metricsService: MetricsService,
+    private readonly logger: Logger
   ) {}
 
   async onModuleDestroy() {
@@ -44,6 +46,10 @@ export class EventsService implements OnModuleDestroy {
     req: Request,
     res: Response,
   ): Promise<void> {
+    const requestId = uuidv4();
+
+    this.logger.log({requestId}, 'Controller: Received new events stream')
+
     return new Promise((resolve, reject) => {
       const worker = new Worker(
         path.resolve(__dirname, 'batch-processing.worker.js'),
@@ -62,8 +68,8 @@ export class EventsService implements OnModuleDestroy {
         if (batch.length >= batchSize) {
           pipeline.pause()
           try {
-            const { outboxEvents } = await this.processWithWorker(worker, batch)
-            await this.saveBatch(outboxEvents)
+            const { outboxEvents } = await this.processWithWorker(worker, batch, requestId)
+            await this.saveBatch(outboxEvents, requestId)
           } finally {
             batch = []
             pipeline.resume()
@@ -73,12 +79,15 @@ export class EventsService implements OnModuleDestroy {
 
       pipeline.on('end', async () => {
         if (batch.length) {
-          const { outboxEvents } = await this.processWithWorker(worker, batch)
-          await this.saveBatch(outboxEvents)
+          const { outboxEvents } = await this.processWithWorker(worker, batch, requestId)
+          await this.saveBatch(outboxEvents, requestId)
         }
         await worker.terminate()
         res.status(200).send('All points processed')
-        this.logger.log('Finished processing events', totalSize)
+        this.logger.log({
+          totalSize: totalSize,
+          requestId
+        }, 'Finished processing request')
         resolve()
       })
 
@@ -94,6 +103,7 @@ export class EventsService implements OnModuleDestroy {
   private processWithWorker(
     worker: Worker,
     events: Event[],
+    requestId: string
   ): Promise<{ outboxEvents: Prisma.OutboxEventCreateManyInput[] }> {
     return new Promise((resolve, reject) => {
       const onMessage = (msg: any) => {
@@ -112,11 +122,11 @@ export class EventsService implements OnModuleDestroy {
 
       worker.once('message', onMessage)
       worker.once('error', onError)
-      worker.postMessage(events)
+      worker.postMessage({events, requestId})
     })
   }
 
-  private async saveBatch(outboxEvents: Prisma.OutboxEventCreateManyInput[]) {
+  private async saveBatch(outboxEvents: Prisma.OutboxEventCreateManyInput[], requestId: string) {
     if (!outboxEvents.length) return
 
     try {
@@ -125,11 +135,24 @@ export class EventsService implements OnModuleDestroy {
         skipDuplicates: true,
       })
       this.metricsService.acceptedEventsCounter.inc(outboxEvents.length)
-      this.logger.log(`Saved ${outboxEvents.length} events (0 failed)`)
+      this.logger.log(
+        {
+          type: "EVENTS",
+          correlationId: requestId,
+          savedCount: outboxEvents.length,
+        },
+        'Saved events batch'
+      )
     } catch (e) {
-      console.error('Error during saving to DB', e)
+      this.logger.log(
+        {
+          type: "EVENTS",
+          correlationId: requestId,
+          failedCount: outboxEvents.length,
+        },
+        'Error during saving batch to DB'
+      )
       this.metricsService.failedEventsCounter.inc(outboxEvents.length)
-      this.logger.log(`FAILED to Save ${outboxEvents.length} events`)
     } finally {
       this.metricsService.processedEventsCounter.inc(outboxEvents.length)
     }

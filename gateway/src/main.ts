@@ -1,14 +1,16 @@
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
-import * as bodyParser from 'body-parser'
+import { Logger as PinoLogger } from 'nestjs-pino'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
+    logger: false,
   })
 
-  // app.use(bodyParser.json({ limit: '20mb' }));
   app.enableShutdownHooks()
+  app.useLogger(app.get(PinoLogger))
+
   await app.listen(3000)
 }
 bootstrap()

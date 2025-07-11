@@ -1,6 +1,6 @@
 {
   "name": "@kingo1/universe-assignment-shared",
-  "version": "1.1.1",
+  "version": "1.1.4",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,7 +18,11 @@
     "@nestjs/config": "^4.0.2",
     "@prisma/client": "^6.11.1",
     "nats": "^2.29.3",
+    "nestjs-pino": "^4.4.0",
     "p-limit": "^3.1.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.5.0",
+    "pino-pretty": "^13.0.0",
     "prisma": "^6.11.1"
   },
   "devDependencies": {

@@ -3,6 +3,7 @@ import { AckPolicy, connect, NatsConnection, StringCodec, JsMsg } from 'nats'
 import { ConfigService } from '@nestjs/config'
 import { Event } from '../../types'
 import * as pLimit from 'p-limit'
+import { Logger } from 'nestjs-pino'
 
 type HandlerFunction = (data: Event) => Promise<void>
 
@@ -15,14 +16,17 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
   private readonly activePromises = new Set<Promise<void>>()
   private limit = pLimit(20)
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly logger: Logger
+  ) {}
 
   async onModuleInit() {
     this.running = true
     this.nc = await connect({
       servers: `nats://${this.configService.getOrThrow('NATS_URL')}`,
     })
-    console.log('Connected to NATS')
+    this.logger.log('Connected to NATS')
 
     const jsm = await this.nc.jetstreamManager()
     const stream = this.configService.getOrThrow('NATS_STREAM')
@@ -35,7 +39,7 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
       })
     } catch (err) {
       if (err.api_error?.err_code === 10148) {
-        console.log('Consumer already exists, skipping creation.')
+        this.logger.log('Consumer already exists, skipping creation.')
       } else {
         throw err
       }
@@ -46,10 +50,10 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     this.running = false
-    console.log('Waiting for in-flight events to finish...')
+    this.logger.log('Waiting for in-flight events to finish...')
     await Promise.allSettled(this.activePromises)
     await this.nc.close()
-    console.log('Disconnected from NATS')
+    this.logger.log('Disconnected from NATS')
   }
 
   private async startConsuming() {
@@ -59,20 +63,47 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
       this.configService.getOrThrow('NATS_CONSUMER'),
     )
 
-    const messages = await consumer.consume()
+    const messages = await consumer.consume();
 
-    ;(async () => {
+    (async () => {
       for await (const m of messages) {
         if (!this.running) break
 
+        const outboxEventId = m.headers?.get('outboxEventId') ?? 'unknown'
+        const requestId = m.headers?.get('requestId') ?? 'unknown'
+
         const promise = this.limit(async () => {
-          const data = JSON.parse(this.sc.decode(m.data))
+          const data = JSON.parse(this.sc.decode(m.data));
+
+          this.logger.debug({
+            msg: 'Start processing event',
+            outboxEventId,
+            requestId,
+            subject: m.subject,
+          })
+
           await Promise.all(this.handlers.map(handler => handler(data)))
           await m.ack()
+
+          this.logger.debug({
+            msg: 'Event processed successfully',
+            outboxEventId,
+            requestId,
+            subject: m.subject,
+          })
         })
           .catch(err => {
-            console.error('Handler error:', err)
+            this.logger.error('Handler error:', err)
             m.nak()
+
+            this.logger.error({
+              msg: 'Error processing event',
+              errorMessage: err.message,
+              stack: err.stack,
+              outboxEventId,
+              requestId,
+              subject: m.subject,
+            })
           })
           .finally(() => {
             this.activePromises.delete(promise)
