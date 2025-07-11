@@ -58,8 +58,8 @@ export class EventsService implements OnModuleDestroy {
 				if (batch.length >= batchSize) {
 					pipeline.pause();
 					try {
-						const {outboxEvents, failedCount} = await this.processWithWorker(worker, batch);
-						await this.saveBatch(outboxEvents, failedCount);
+						const {outboxEvents} = await this.processWithWorker(worker, batch);
+						await this.saveBatch(outboxEvents);
 					} finally {
 						batch = [];
 						pipeline.resume();
@@ -69,8 +69,8 @@ export class EventsService implements OnModuleDestroy {
 
 			pipeline.on('end', async () => {
 				if (batch.length) {
-					const {outboxEvents, failedCount} = await this.processWithWorker(worker, batch);
-					await this.saveBatch(outboxEvents, failedCount);
+					const {outboxEvents} = await this.processWithWorker(worker, batch);
+					await this.saveBatch(outboxEvents);
 				}
 				await worker.terminate();
 				res.status(200).send('All points processed');
@@ -90,7 +90,7 @@ export class EventsService implements OnModuleDestroy {
 	private processWithWorker(
 		worker: Worker,
 		events: Event[],
-	): Promise<{ outboxEvents: Prisma.OutboxEventCreateManyInput[]; failedCount: number }> {
+	): Promise<{ outboxEvents: Prisma.OutboxEventCreateManyInput[] }> {
 		return new Promise((resolve, reject) => {
 			const onMessage = (msg: any) => {
 				cleanup();
@@ -113,18 +113,25 @@ export class EventsService implements OnModuleDestroy {
 	}
 
 	private async saveBatch(
-		outboxEvents: Prisma.OutboxEventCreateManyInput[],
-		failedCount: number,
+		outboxEvents: Prisma.OutboxEventCreateManyInput[]
 	) {
 		if (!outboxEvents.length) return;
 
-		await this.prismaService.outboxEvent.createMany({
-			data: outboxEvents,
-			skipDuplicates: true,
-		});
-		this.metricsService.processedEventsCounter.inc(outboxEvents.length);
-		this.metricsService.failedEventsCounter.inc(failedCount);
-		this.metricsService.acceptedEventsCounter.inc(outboxEvents.length - failedCount);
-		this.logger.log(`Saved ${outboxEvents.length} events (${failedCount} failed)`);
+		try {
+			await this.prismaService.outboxEvent.createMany({
+				data: outboxEvents,
+				skipDuplicates: true,
+			});
+			this.metricsService.acceptedEventsCounter.inc(outboxEvents.length);
+			this.logger.log(`Saved ${outboxEvents.length} events (0 failed)`);
+		}
+		catch (e) {
+			console.error('Error during saving to DB', e);
+			this.metricsService.failedEventsCounter.inc(outboxEvents.length);
+			this.logger.log(`FAILED to Save ${outboxEvents.length} events`);
+		}
+		finally {
+			this.metricsService.processedEventsCounter.inc(outboxEvents.length);
+		}
 	}
 }

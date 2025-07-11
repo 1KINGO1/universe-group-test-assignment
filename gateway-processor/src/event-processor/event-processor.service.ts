@@ -4,6 +4,8 @@ import { NatsService } from 'src/nats/nats.service';
 import { OutboxStatus } from '@prisma/client';
 import {ConfigService} from '@nestjs/config';
 import {MetricsService} from '../metrics/metrics.service';
+import { eventSchema } from './schemas/event.schema';
+import { ZodError } from 'zod';
 
 @Injectable()
 export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
@@ -64,7 +66,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         const pending = await this.prisma.outboxEvent.findMany({
             where: { status: OutboxStatus.PENDING },
             orderBy: { createdAt: 'asc' },
-            select: { id: true, eventType: true, source: true, payload: true, retryCount: true },
+            select: { id: true, payload: true, retryCount: true },
             take: this.BATCH_SIZE,
         });
         if (!pending.length) return;
@@ -74,13 +76,26 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
 
         for (const evt of pending) {
             try {
-                const eventObj = typeof evt.payload === 'string' ? JSON.parse(evt.payload) : evt.payload;
-                await this.natsService.publish(evt.source, eventObj as never as Event);
+                const eventObj: Event = typeof evt.payload === 'string' ? JSON.parse(evt.payload) : evt.payload;
+                eventSchema.parse(eventObj);
+                await this.natsService.publish(eventObj.source, eventObj as never as Event);
                 successes.push(evt.id);
             } catch (error) {
                 const retries = (evt.retryCount ?? 0) + 1;
-                failures.push({ id: evt.id, error: error.message, retries });
-                this.logger.error(`Error sending ${evt.id}: ${error.message}, retries=${retries}`);
+                let errorMsg = '';
+
+                if (error instanceof ZodError) {
+                    errorMsg = `Validation failed`;
+                } else if (error instanceof SyntaxError) {
+                    errorMsg = `Invalid JSON: ${error.message}`;
+                } else if (error instanceof Error) {
+                    errorMsg = error.message;
+                } else {
+                    errorMsg = 'Unknown error';
+                }
+
+                failures.push({ id: evt.id, error: errorMsg, retries });
+                this.logger.error(`Error sending ${evt.id}: ${errorMsg}, retries=${retries}`);
             }
         }
 

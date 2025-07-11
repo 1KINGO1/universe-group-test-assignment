@@ -47,11 +47,9 @@ model Event {
 
 model OutboxEvent {
   id         String       @id @default(uuid())
-  eventType  String
   payload    Json
-  source     Source
   createdAt  DateTime     @default(now()) @map("created_at")
-  sentAt     DateTime? @map("sent_at")
+  sentAt     DateTime?    @map("sent_at")
   status     OutboxStatus @default(PENDING)
   error      String?
   retryCount Int          @default(0) @map("retry_count")
@@ -89,21 +87,4 @@ enum Gender {
   non_binary
 
   @@map("genders")
-}
-
-enum Service {
-  gateway
-  fb_collector
-  ttk_collector
-  reporter
-
-  @@map("services")
-}
-
-enum Status {
-  accepted
-  processed
-  failed
-
-  @@map("event_status")
 }
