@@ -31,5 +31,8 @@ EXPOSE 3000
 ENV NODE_ENV=production
 
 RUN apk add --no-cache curl
+RUN apk add --no-cache bash
+COPY wait-for-it.sh .
+RUN chmod +x wait-for-it.sh
 
 CMD ["node", "dist/main.js"]

@@ -10,7 +10,7 @@ services:
       EVENT_ENDPOINT: http://gateway:3000/events
     networks:
       - app-network
-
+      
   gateway:
     restart: unless-stopped
     depends_on:
@@ -21,7 +21,6 @@ services:
       context: gateway
     environment:
       NODE_ENV: production
-      NATS_URL: nats:4222
       DATABASE_URL: postgres://admin:123456@postgres/main
     networks:
       - app-network
@@ -31,6 +30,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: ["bash", "wait-for-it.sh", "postgres:5432", "--", "npm", "run", "start:prod"]
 
   gateway-processor:
     restart: unless-stopped
@@ -55,6 +55,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
 
   nats:
     restart: unless-stopped
@@ -99,6 +100,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
 
   ttk-collector:
     restart: unless-stopped
@@ -122,6 +124,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
 
   reporter:
     restart: unless-stopped
@@ -143,6 +146,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: ["bash", "wait-for-it.sh", "postgres:5432", "--", "npm", "run", "start:prod"]
 
   prometheus:
     restart: unless-stopped
