@@ -1,16 +1,12 @@
 import { Injectable } from '@nestjs/common'
 import { EventsReport } from './dtos/event-report.dto'
 import {
-  FacebookEventType,
   PrismaService,
-  TiktokEventType,
 } from '@kingo1/universe-assignment-shared'
 import { RevenueReport } from './dtos/revenue-report.dto'
 import { DemographicsReport } from './dtos/demographics-report.dto'
 import { MetricsService } from '../metrics/metrics.service'
-
-type Event = FacebookEventType | TiktokEventType
-const REVENUE_EVENTS: Event[] = ['purchase', 'checkout.complete']
+import {REVENUE_EVENTS} from '../constants/revenue-events';
 
 @Injectable()
 export class ReportsService {
@@ -153,36 +149,7 @@ export class ReportsService {
         },
       })
 
-      // TODO: ?
       if (source === 'facebook') {
-        // const [
-        // 	byGender,
-        // 	byAge,
-        // 	byCountry,
-        // 	byCity,
-        // ] = await Promise.all([
-        // 	this.prismaService.user.groupBy({
-        // 		by: ['gender'],
-        // 		where: { source, ...dateFilter },
-        // 		_count: { gender: true },
-        // 	}),
-        // 	this.prismaService.user.groupBy({
-        // 		by: ['age'],
-        // 		where: { source, ...dateFilter },
-        // 		_count: { age: true },
-        // 	}),
-        // 	this.prismaService.user.groupBy({
-        // 		by: ['country'],
-        // 		where: { source, ...dateFilter },
-        // 		_count: { country: true },
-        // 	}),
-        // 	this.prismaService.user.groupBy({
-        // 		by: ['city'],
-        // 		where: { source, ...dateFilter },
-        // 		_count: { city: true },
-        // 	})
-        // ]);
-
         const byGender = await this.prismaService.user.groupBy({
           by: ['gender'],
           where: { source, ...dateFilter },
