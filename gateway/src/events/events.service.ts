@@ -22,9 +22,13 @@ export class EventsService implements OnModuleDestroy {
     private readonly metricsService: MetricsService,
     private readonly logger: Logger,
   ) {
-    this.pool = workerpool.pool(path.resolve(__dirname, 'batch-processing.worker.js'), {
-      maxWorkers: 6,
-    })
+    // Worker pool for processing loops (to avoid locking event loop)
+    this.pool = workerpool.pool(
+      path.resolve(__dirname, 'batch-processing.worker.js'),
+      {
+        maxWorkers: 6,
+      },
+    )
   }
 
   async onModuleDestroy() {
@@ -48,7 +52,10 @@ export class EventsService implements OnModuleDestroy {
     handle.finally(() => this.activeRequests.delete(handle))
   }
 
-  private async handleStreamRequest(req: Request, res: Response): Promise<void> {
+  private async handleStreamRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
     const requestId = uuidv4()
     this.logger.log({ requestId }, 'Controller: Received new events stream')
 
@@ -63,9 +70,13 @@ export class EventsService implements OnModuleDestroy {
         batch.push(value as Event)
         totalSize++
         if (batch.length >= batchSize) {
+          // Blocking pipeline to avoid receiving next values
           pipeline.pause()
           try {
-            const { outboxEvents } = await this.processWithPool(batch, requestId)
+            const { outboxEvents } = await this.processWithPool(
+              batch,
+              requestId,
+            )
             await this.saveBatch(outboxEvents, requestId)
           } catch (e) {
             pipeline.destroy(e)
@@ -79,12 +90,19 @@ export class EventsService implements OnModuleDestroy {
 
       pipeline.on('end', async () => {
         try {
+          // If something is left in the batch, process
           if (batch.length) {
-            const { outboxEvents } = await this.processWithPool(batch, requestId)
+            const { outboxEvents } = await this.processWithPool(
+              batch,
+              requestId,
+            )
             await this.saveBatch(outboxEvents, requestId)
           }
           res.status(200).send('All points processed')
-          this.logger.log({ totalSize, requestId }, 'Finished processing request')
+          this.logger.log(
+            { totalSize, requestId },
+            'Finished processing request',
+          )
           resolve()
         } catch (e) {
           this.logger.error(e)
@@ -105,7 +123,10 @@ export class EventsService implements OnModuleDestroy {
     return this.pool.exec('processEvents', [events, requestId])
   }
 
-  private async saveBatch(outboxEvents: Prisma.OutboxEventCreateManyInput[], requestId: string) {
+  private async saveBatch(
+    outboxEvents: Prisma.OutboxEventCreateManyInput[],
+    requestId: string,
+  ) {
     if (!outboxEvents.length) return
 
     try {

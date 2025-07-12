@@ -19,7 +19,7 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
   ) {}
 
   async onModuleInit() {
@@ -50,7 +50,12 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Disconnected from NATS')
   }
 
-  async publish(subject: string, message: Event, outboxEventId: string, requestId: string) {
+  async publish(
+    subject: string,
+    message: Event,
+    outboxEventId: string,
+    requestId: string,
+  ) {
     const msgString = JSON.stringify(message)
 
     const headers = new MsgHdrsImpl()
@@ -63,7 +68,7 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
         this.sc.encode(msgString),
         {
           timeout: 5000,
-          headers
+          headers,
         },
       )
     } catch (err) {

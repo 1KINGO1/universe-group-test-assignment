@@ -5,13 +5,16 @@ export interface ProcessResult {
   outboxEvents: Prisma.OutboxEventCreateManyInput[]
 }
 
-export function processEvents(events: Event[], requestId: string): ProcessResult {
+export function processEvents(
+  events: Event[],
+  requestId: string,
+): ProcessResult {
   const outboxEvents: ProcessResult['outboxEvents'] = []
 
   for (const event of events) {
     const base: Omit<Prisma.OutboxEventCreateManyInput, 'status' | 'error'> = {
       payload: JSON.stringify(event),
-      requestId
+      requestId,
     }
 
     outboxEvents.push(base)

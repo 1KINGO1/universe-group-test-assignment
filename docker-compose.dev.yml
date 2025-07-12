@@ -2,9 +2,8 @@ version: '3.8'
 
 services:
   publisher:
+    stop_grace_period: 120s
     restart: on-failure
-    depends_on:
-      - gateway
     image: andriiuni/events
     environment:
       EVENT_ENDPOINT: http://gateway:3000/events
@@ -17,6 +16,7 @@ services:
     depends_on:
       - nats
       - prisma-migrate
+      - publisher
     build:
       context: gateway
     volumes:
@@ -70,6 +70,7 @@ services:
 
   nats:
     restart: on-failure
+    stop_grace_period: 120s
     image: nats:latest
     command: ['--jetstream', '--store_dir', '/data/jetstream', '-m', '8222']
     ports:
@@ -81,6 +82,7 @@ services:
 
   postgres:
     restart: on-failure
+    stop_grace_period: 120s
     image: postgres:latest
     environment:
       POSTGRES_USER: admin

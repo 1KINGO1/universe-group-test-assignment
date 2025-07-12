@@ -4,7 +4,7 @@ import { Logger as PinoLogger } from 'nestjs-pino'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: false
+    logger: false,
   })
   app.useLogger(app.get(PinoLogger))
   app.enableShutdownHooks()

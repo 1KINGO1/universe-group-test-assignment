@@ -7,7 +7,7 @@ describe('processEvents', () => {
       { id: '2', name: 'event2 :P', extra: 123 },
     ]
 
-    const requestId = "123";
+    const requestId = '123'
 
     const result = processEvents(events as any, requestId)
 
@@ -20,7 +20,7 @@ describe('processEvents', () => {
   })
 
   it('should return empty outboxEvents array if input is empty', () => {
-    const result = processEvents([], "123")
+    const result = processEvents([], '123')
     expect(result).toEqual({ outboxEvents: [] })
   })
 })

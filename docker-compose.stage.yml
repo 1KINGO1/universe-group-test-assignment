@@ -2,21 +2,21 @@ version: '3.8'
 
 services:
   publisher:
+    stop_grace_period: 120s
     restart: unless-stopped
-    depends_on:
-      - gateway
     image: andriiuni/events:latest
     environment:
       EVENT_ENDPOINT: http://gateway:3000/events
     networks:
       - app-network
-      
+
   gateway:
+    stop_grace_period: 120s
     restart: unless-stopped
     depends_on:
-      - nats
       - prisma-migrate
       - postgres
+      - publisher
     build:
       context: gateway
     environment:
@@ -30,14 +30,23 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["bash", "wait-for-it.sh", "postgres:5432", "--", "npm", "run", "start:prod"]
+    command:
+      [
+        'bash',
+        'wait-for-it.sh',
+        'postgres:5432',
+        '--',
+        'npm',
+        'run',
+        'start:prod',
+      ]
 
   gateway-processor:
+    stop_grace_period: 60s
     restart: unless-stopped
     depends_on:
       - nats
-      - prisma-migrate
-      - postgres
+      - gateway
     build:
       context: gateway-processor
     environment:
@@ -55,18 +64,31 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
+    command:
+      ['bash', 'wait-for-it.sh', 'nats:4222', '--', 'npm', 'run', 'start:prod']
 
   nats:
+    stop_grace_period: 60s
     restart: unless-stopped
     image: nats:latest
     command: ['--jetstream', '--store_dir', '/data/jetstream', '-m', '8222']
     volumes:
       - nats-data:/data/jetstream
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q --spider http://localhost:8222/healthz || exit 1',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - app-network
 
   postgres:
+    stop_grace_period: 120s
     restart: unless-stopped
     image: postgres:latest
     environment:
@@ -77,14 +99,18 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   fb-collector:
+    stop_grace_period: 60s
     restart: unless-stopped
     depends_on:
-      - prisma-migrate
-      - nats
       - gateway-processor
-      - postgres
     build:
       context: fb-collector
     environment:
@@ -101,15 +127,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
+    command:
+      [
+        'bash',
+        'wait-for-it.sh',
+        'gateway-processor:4222',
+        '--',
+        'npm',
+        'run',
+        'start:prod',
+      ]
 
   ttk-collector:
+    stop_grace_period: 60s
     restart: unless-stopped
     depends_on:
-      - prisma-migrate
-      - nats
       - gateway-processor
-      - postgres
     build:
       context: ttk-collector
     environment:
@@ -126,7 +159,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["bash", "wait-for-it.sh", "nats:4222", "--", "npm", "run", "start:prod"]
+    command:
+      [
+        'bash',
+        'wait-for-it.sh',
+        'gateway-processor:4222',
+        '--',
+        'npm',
+        'run',
+        'start:prod',
+      ]
 
   reporter:
     restart: unless-stopped
@@ -148,7 +190,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["bash", "wait-for-it.sh", "postgres:5432", "--", "npm", "run", "start:prod"]
+    command:
+      [
+        'bash',
+        'wait-for-it.sh',
+        'postgres:5432',
+        '--',
+        'npm',
+        'run',
+        'start:prod',
+      ]
 
   prometheus:
     restart: unless-stopped
@@ -157,6 +208,16 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - app-network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q --spider http://localhost:9090/-/ready || exit 1',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   grafana:
     restart: unless-stopped
@@ -169,6 +230,16 @@ services:
       - grafana-data:/var/lib/grafana
     networks:
       - app-network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q --spider http://localhost:3000/api/health || exit 1',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   prisma-migrate:
     build: migration-runner

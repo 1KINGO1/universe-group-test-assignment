@@ -5,7 +5,7 @@ import { NatsService } from 'src/nats/nats.service'
 import { ConfigService } from '@nestjs/config'
 import { MetricsService } from '../metrics/metrics.service'
 import { OutboxStatus } from '@prisma/client'
-import {Logger} from 'nestjs-pino';
+import { Logger } from 'nestjs-pino'
 
 describe('EventProcessorService', () => {
   let service: EventProcessorService

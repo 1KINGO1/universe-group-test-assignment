@@ -2,9 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { EventsService } from './events.service'
 import { PrismaService } from '@kingo1/universe-assignment-shared'
 import { Request, Response } from 'express'
-import { Worker } from 'worker_threads'
+import * as workerpool from 'workerpool'
 import { MetricsService } from '../metrics/metrics.service'
-import {Logger} from 'nestjs-pino';
+import { Logger } from 'nestjs-pino'
 
 // Mock MetricsService
 jest.mock('src/metrics/metrics.service', () => ({
@@ -15,13 +15,10 @@ jest.mock('src/metrics/metrics.service', () => ({
   })),
 }))
 
-// Mock worker_threads
-jest.mock('worker_threads', () => ({
-  Worker: jest.fn().mockImplementation(() => ({
-    on: jest.fn(),
-    once: jest.fn(),
-    off: jest.fn(),
-    postMessage: jest.fn(),
+// Mock workerpool
+jest.mock('workerpool', () => ({
+  pool: jest.fn().mockImplementation(() => ({
+    exec: jest.fn(),
     terminate: jest.fn().mockResolvedValue(undefined),
   })),
 }))
@@ -40,6 +37,7 @@ jest.mock('stream-chain', () => ({
     on: jest.fn(),
     pause: jest.fn(),
     resume: jest.fn(),
+    destroy: jest.fn(),
   })),
 }))
 
@@ -49,6 +47,7 @@ describe('EventsService', () => {
   let metricsService: any
   let mockRequest: Partial<Request>
   let mockResponse: Partial<Response>
+  let mockPool: any
 
   const mockPrismaService = {
     outboxEvent: {
@@ -68,6 +67,14 @@ describe('EventsService', () => {
   }
 
   beforeEach(async () => {
+    jest.clearAllMocks()
+
+    mockPool = {
+      exec: jest.fn(),
+      terminate: jest.fn().mockResolvedValue(undefined),
+    }
+    ;(workerpool.pool as jest.Mock).mockReturnValue(mockPool)
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsService,
@@ -82,7 +89,7 @@ describe('EventsService', () => {
         {
           provide: Logger,
           useValue: mockLoggerService,
-        }
+        },
       ],
     }).compile()
 
@@ -99,19 +106,32 @@ describe('EventsService', () => {
       status: jest.fn().mockReturnThis(),
       send: jest.fn(),
     } as Partial<Response>
+  })
 
-    // Reset all mocks
-    jest.clearAllMocks()
+  describe('constructor', () => {
+    it('should create worker pool on initialization', () => {
+      expect(workerpool.pool).toHaveBeenCalledWith(
+        expect.stringContaining('batch-processing.worker.js'),
+        { maxWorkers: 6 },
+      )
+    })
   })
 
   describe('onModuleDestroy', () => {
     it('should set shuttingDown flag and wait for active requests', async () => {
-      const mockPromise = Promise.resolve();
-			(service as any).activeRequests.add(mockPromise)
+      const mockPromise = Promise.resolve()
+      ;(service as any).activeRequests.add(mockPromise)
 
       await service.onModuleDestroy()
 
       expect((service as any).shuttingDown).toBe(true)
+      expect(mockPool.terminate).toHaveBeenCalled()
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        'Shutting down... waiting for in-flight requests',
+      )
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        'Worker pool terminated.',
+      )
     })
 
     it('should wait for all active requests to complete', async () => {
@@ -127,6 +147,7 @@ describe('EventsService', () => {
 
       expect(endTime - startTime).toBeGreaterThanOrEqual(90)
       expect((service as any).shuttingDown).toBe(true)
+      expect(mockPool.terminate).toHaveBeenCalled()
     })
   })
 
@@ -178,17 +199,7 @@ describe('EventsService', () => {
   })
 
   describe('handleStreamRequest', () => {
-    it('should create and configure worker', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn(),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn().mockResolvedValue(undefined),
-      }
-
-      ;(Worker as any as jest.Mock).mockReturnValue(mockWorker)
-
+    it('should create and configure streaming pipeline', async () => {
       const { chain } = require('stream-chain')
       const mockPipeline = {
         on: jest.fn((event, callback) => {
@@ -198,6 +209,7 @@ describe('EventsService', () => {
         }),
         pause: jest.fn(),
         resume: jest.fn(),
+        destroy: jest.fn(),
       }
       chain.mockReturnValue(mockPipeline)
 
@@ -206,23 +218,15 @@ describe('EventsService', () => {
       )
       await handleStreamRequest(mockRequest, mockResponse)
 
-      expect(Worker).toHaveBeenCalledWith(
-        expect.stringContaining('batch-processing.worker.js'),
+      expect(mockPipeline.on).toHaveBeenCalledWith('data', expect.any(Function))
+      expect(mockPipeline.on).toHaveBeenCalledWith('end', expect.any(Function))
+      expect(mockPipeline.on).toHaveBeenCalledWith(
+        'error',
+        expect.any(Function),
       )
-      expect(mockWorker.on).toHaveBeenCalledWith('error', expect.any(Function))
     })
 
     it('should handle pipeline end event', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn(),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn().mockResolvedValue(undefined),
-      }
-
-      ;(Worker as any as jest.Mock).mockReturnValue(mockWorker)
-
       const { chain } = require('stream-chain')
       const mockPipeline = {
         on: jest.fn((event, callback) => {
@@ -232,6 +236,7 @@ describe('EventsService', () => {
         }),
         pause: jest.fn(),
         resume: jest.fn(),
+        destroy: jest.fn(),
       }
       chain.mockReturnValue(mockPipeline)
 
@@ -242,20 +247,13 @@ describe('EventsService', () => {
 
       expect(mockResponse.status).toHaveBeenCalledWith(200)
       expect(mockResponse.send).toHaveBeenCalledWith('All points processed')
-      expect(mockWorker.terminate).toHaveBeenCalled()
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: expect.any(String) }),
+        'Controller: Received new events stream',
+      )
     })
 
     it('should handle pipeline error event', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn(),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn().mockResolvedValue(undefined),
-      }
-
-      ;(Worker as any as jest.Mock).mockReturnValue(mockWorker)
-
       const { chain } = require('stream-chain')
       const mockPipeline = {
         on: jest.fn((event, callback) => {
@@ -265,6 +263,7 @@ describe('EventsService', () => {
         }),
         pause: jest.fn(),
         resume: jest.fn(),
+        destroy: jest.fn(),
       }
       chain.mockReturnValue(mockPipeline)
 
@@ -274,85 +273,83 @@ describe('EventsService', () => {
 
       await expect(
         handleStreamRequest(mockRequest, mockResponse),
-      ).rejects.toBeUndefined()
+      ).rejects.toThrow('Pipeline error')
 
       expect(mockResponse.status).toHaveBeenCalledWith(500)
       expect(mockResponse.send).toHaveBeenCalledWith('Failed to process')
-      expect(mockWorker.terminate).toHaveBeenCalled()
+      expect(mockLoggerService.error).toHaveBeenCalled()
+    })
+
+    it('should process batches when batch size is reached', async () => {
+      const { chain } = require('stream-chain')
+      const mockPipeline = {
+        on: jest.fn((event, callback) => {
+          if (event === 'data') {
+            // Simulate receiving 4000 events to trigger batch processing
+            for (let i = 0; i < 4000; i++) {
+              callback({ value: { id: i, data: `test-${i}` } })
+            }
+          }
+          if (event === 'end') {
+            setTimeout(() => callback(), 0)
+          }
+        }),
+        pause: jest.fn(),
+        resume: jest.fn(),
+        destroy: jest.fn(),
+      }
+      chain.mockReturnValue(mockPipeline)
+
+      mockPool.exec.mockResolvedValue({ outboxEvents: [] })
+      const saveBatchSpy = jest
+        .spyOn(service as any, 'saveBatch')
+        .mockResolvedValue(undefined)
+
+      const handleStreamRequest = (service as any).handleStreamRequest.bind(
+        service,
+      )
+      await handleStreamRequest(mockRequest, mockResponse)
+
+      expect(mockPipeline.pause).toHaveBeenCalled()
+      expect(mockPipeline.resume).toHaveBeenCalled()
+      expect(saveBatchSpy).toHaveBeenCalled()
     })
   })
 
-  describe('processWithWorker', () => {
-    it('should process events with worker successfully', async () => {
-			const events = [{ id: '1', data: 'test' }]
-			const requestId = 'test-request-id'
+  describe('processWithPool', () => {
+    it('should process events with worker pool successfully', async () => {
+      const events = [{ id: '1', data: 'test' }]
+      const requestId = 'test-request-id'
+      const expectedResult = { outboxEvents: [{ ...events[0], requestId }] }
 
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn((event, callback) => {
-          if (event === 'message') {
-            setTimeout(() => callback({ outboxEvents: [{...events[0], requestId}] }), 0)
-          }
-        }),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn(),
-      }
+      mockPool.exec.mockResolvedValue(expectedResult)
 
-      const processWithWorker = (service as any).processWithWorker.bind(service)
+      const processWithPool = (service as any).processWithPool.bind(service)
+      const result = await processWithPool(events, requestId)
 
-      const result = await processWithWorker(mockWorker, events, requestId)
-			console.log(result);
-
-      expect(result).toEqual({ outboxEvents: [{...events[0], requestId}] })
-      expect(mockWorker.postMessage).toHaveBeenCalledWith({events, requestId})
+      expect(result).toEqual(expectedResult)
+      expect(mockPool.exec).toHaveBeenCalledWith('processEvents', [
+        events,
+        requestId,
+      ])
     })
 
-    it('should handle worker error', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn((event, callback) => {
-          if (event === 'error') {
-            setTimeout(() => callback(new Error('Worker error')), 0)
-          }
-        }),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn(),
-      }
-			const requestId = 'test-request-id'
+    it('should handle worker pool error', async () => {
       const events = [{ id: '1', data: 'test' }]
-      const processWithWorker = (service as any).processWithWorker.bind(service)
+      const requestId = 'test-request-id'
+      const poolError = new Error('Pool error')
 
-      await expect(processWithWorker(mockWorker, events, requestId)).rejects.toThrow(
-        'Worker error',
+      mockPool.exec.mockRejectedValue(poolError)
+
+      const processWithPool = (service as any).processWithPool.bind(service)
+
+      await expect(processWithPool(events, requestId)).rejects.toThrow(
+        'Pool error',
       )
-      expect(mockWorker.postMessage).toHaveBeenCalledWith({events, requestId})
-    })
-
-    it('should cleanup event listeners', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn((event, callback) => {
-          if (event === 'message') {
-            setTimeout(() => callback({ outboxEvents: [] }), 0)
-          }
-        }),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn(),
-      }
-
-      const events = [{ id: '1', data: 'test' }]
-      const processWithWorker = (service as any).processWithWorker.bind(service)
-
-      await processWithWorker(mockWorker, events)
-
-      expect(mockWorker.off).toHaveBeenCalledWith(
-        'message',
-        expect.any(Function),
-      )
-      expect(mockWorker.off).toHaveBeenCalledWith('error', expect.any(Function))
+      expect(mockPool.exec).toHaveBeenCalledWith('processEvents', [
+        events,
+        requestId,
+      ])
     })
   })
 
@@ -362,13 +359,14 @@ describe('EventsService', () => {
         { id: '1', eventType: 'test', payload: {} },
         { id: '2', eventType: 'test2', payload: {} },
       ]
+      const requestId = 'test-request-id'
 
       ;(prismaService.outboxEvent.createMany as jest.Mock).mockResolvedValue({
         count: 2,
       })
 
       const saveBatch = (service as any).saveBatch.bind(service)
-      await saveBatch(outboxEvents)
+      await saveBatch(outboxEvents, requestId)
 
       expect(prismaService.outboxEvent.createMany).toHaveBeenCalledWith({
         data: outboxEvents,
@@ -376,11 +374,20 @@ describe('EventsService', () => {
       })
       expect(metricsService.acceptedEventsCounter.inc).toHaveBeenCalledWith(2)
       expect(metricsService.processedEventsCounter.inc).toHaveBeenCalledWith(2)
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        {
+          type: 'EVENTS',
+          requestId,
+          savedCount: 2,
+        },
+        'Saved events batch',
+      )
     })
 
     it('should handle empty batch', async () => {
+      const requestId = 'test-request-id'
       const saveBatch = (service as any).saveBatch.bind(service)
-      await saveBatch([])
+      await saveBatch([], requestId)
 
       expect(prismaService.outboxEvent.createMany).not.toHaveBeenCalled()
       expect(metricsService.acceptedEventsCounter.inc).not.toHaveBeenCalled()
@@ -389,58 +396,51 @@ describe('EventsService', () => {
 
     it('should handle database error', async () => {
       const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }]
+      const requestId = 'test-request-id'
+      const dbError = new Error('Database error')
 
-      const dbError = new Error('Database error');
-			(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
+      ;(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
         dbError,
       )
-			const requestId = 'test-request-id'
 
       const saveBatch = (service as any).saveBatch.bind(service)
 
-			await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
-      expect(mockLoggerService.error).toHaveBeenCalled()
+      await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
+      expect(mockLoggerService.error).toHaveBeenCalledWith(
+        {
+          type: 'EVENTS',
+          requestId,
+          failedCount: 1,
+        },
+        'Error during saving batch to DB',
+      )
       expect(metricsService.failedEventsCounter.inc).toHaveBeenCalledWith(1)
       expect(metricsService.processedEventsCounter.inc).toHaveBeenCalledWith(1)
       expect(metricsService.acceptedEventsCounter.inc).not.toHaveBeenCalled()
     })
 
     it('should always increment processed counter', async () => {
-      const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }];
+      const outboxEvents = [{ id: '1', eventType: 'test', payload: {} }]
+      const requestId = 'test-request-id'
+      const dbError = new Error('DB Error')
 
-			const dbError = new Error('DB Error');
-
-			(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
-				dbError,
+      ;(prismaService.outboxEvent.createMany as jest.Mock).mockRejectedValue(
+        dbError,
       )
-			const requestId = 'test-request-id'
 
       const saveBatch = (service as any).saveBatch.bind(service)
 
-			await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
-			expect(mockLoggerService.error).toHaveBeenCalled()
+      await expect(saveBatch(outboxEvents, requestId)).rejects.toThrow(dbError)
       expect(metricsService.processedEventsCounter.inc).toHaveBeenCalledWith(1)
     })
   })
 
   describe('Integration scenarios', () => {
     it('should handle complete request flow', async () => {
-      const mockWorker = {
-        on: jest.fn(),
-        once: jest.fn(),
-        off: jest.fn(),
-        postMessage: jest.fn(),
-        terminate: jest.fn().mockResolvedValue(undefined),
-      }
-
-      ;(Worker as any as jest.Mock).mockReturnValue(mockWorker)
+      mockPool.exec.mockResolvedValue({ outboxEvents: [{ id: '1' }] })
       ;(prismaService.outboxEvent.createMany as jest.Mock).mockResolvedValue({
         count: 1,
       })
-
-      const processWithWorkerSpy = jest
-        .spyOn(service as any, 'processWithWorker')
-        .mockResolvedValue({ outboxEvents: [{ id: '1' }] })
 
       const { chain } = require('stream-chain')
       const mockPipeline = {
@@ -451,6 +451,7 @@ describe('EventsService', () => {
         }),
         pause: jest.fn(),
         resume: jest.fn(),
+        destroy: jest.fn(),
       }
       chain.mockReturnValue(mockPipeline)
 
@@ -461,6 +462,10 @@ describe('EventsService', () => {
 
       expect(mockResponse.status).toHaveBeenCalledWith(200)
       expect(mockResponse.send).toHaveBeenCalledWith('All points processed')
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: expect.any(String) }),
+        'Controller: Received new events stream',
+      )
     })
 
     it('should handle service shutdown during request', async () => {
@@ -468,8 +473,6 @@ describe('EventsService', () => {
         mockRequest as Request,
         mockResponse as Response,
       )
-
-      // Simulate shutdown
       ;(service as any).shuttingDown = true
 
       await service.processRequest(
@@ -479,6 +482,15 @@ describe('EventsService', () => {
 
       expect(mockResponse.status).toHaveBeenCalledWith(503)
       expect(mockResponse.send).toHaveBeenCalledWith('Service is shutting down')
+    })
+
+    it('should handle worker pool termination on module destroy', async () => {
+      await service.onModuleDestroy()
+
+      expect(mockPool.terminate).toHaveBeenCalled()
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        'Worker pool terminated.',
+      )
     })
   })
 })

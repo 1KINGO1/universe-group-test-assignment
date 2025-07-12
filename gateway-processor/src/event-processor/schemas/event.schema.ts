@@ -64,9 +64,9 @@ const facebookEngagementBottomSchema = z.object({
 
 const facebookEventSchema = z.object({
   eventId: z.string(),
-  timestamp: z.string().refine((val) => {
-    const date = new Date(val);
-    return !isNaN(date.getTime());
+  timestamp: z.string().refine(val => {
+    const date = new Date(val)
+    return !isNaN(date.getTime())
   }),
   source: z.literal('facebook'),
   funnelStage: funnelStageSchema,
@@ -125,9 +125,9 @@ const tiktokEngagementBottomSchema = z.object({
 
 const tiktokEventSchema = z.object({
   eventId: z.string(),
-  timestamp: z.string().refine((val) => {
-    const date = new Date(val);
-    return !isNaN(date.getTime());
+  timestamp: z.string().refine(val => {
+    const date = new Date(val)
+    return !isNaN(date.getTime())
   }),
   source: z.literal('tiktok'),
   funnelStage: funnelStageSchema,

@@ -10,16 +10,16 @@ describe('ReportsService', () => {
   let service: ReportsService
   let prismaService: {
     event: {
-      count: jest.Mock;
-      groupBy: jest.Mock;
-    };
+      count: jest.Mock
+      groupBy: jest.Mock
+    }
     user: {
-      count: jest.Mock;
-      groupBy: jest.Mock;
-      aggregate: jest.Mock;
-    };
-    $queryRawUnsafe: jest.Mock;
-  };
+      count: jest.Mock
+      groupBy: jest.Mock
+      aggregate: jest.Mock
+    }
+    $queryRawUnsafe: jest.Mock
+  }
   let endMock: jest.Mock
 
   beforeEach(async () => {
@@ -69,7 +69,9 @@ describe('ReportsService', () => {
 
     prismaService.event.count.mockResolvedValue(10)
     prismaService.event.groupBy
-      .mockResolvedValueOnce([{ eventType: 'purchase', _count: { eventType: 5 } }])
+      .mockResolvedValueOnce([
+        { eventType: 'purchase', _count: { eventType: 5 } },
+      ])
       .mockResolvedValueOnce([{ source: 'facebook', _count: { source: 10 } }])
 
     const result = await service.getEventsReport(query)

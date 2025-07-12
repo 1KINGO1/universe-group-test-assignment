@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy
-} from '@nestjs/common'
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
 import { PrismaService, Event } from '@kingo1/universe-assignment-shared'
 import { NatsService } from 'src/nats/nats.service'
 import { OutboxStatus } from '@prisma/client'
@@ -25,7 +21,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     private readonly natsService: NatsService,
     private readonly configService: ConfigService,
     private readonly metricsService: MetricsService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
   ) {
     this.POLL_INTERVAL_MS = parseInt(
       this.configService.getOrThrow('OUTBOX_POLL_INTERVAL_MS'),
@@ -91,12 +87,15 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
           typeof evt.payload === 'string'
             ? JSON.parse(evt.payload)
             : evt.payload
+
+        // Validate event object. If validation fails, it throws an error
         eventSchema.parse(eventObj)
+
         await this.natsService.publish(
           eventObj.source,
           eventObj as never as Event,
           evt.id,
-          evt.requestId
+          evt.requestId,
         )
         successes.push(evt.id)
       } catch (error) {
@@ -126,12 +125,11 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         data: { status: OutboxStatus.SENT, sentAt: new Date() },
       })
       this.logger.log(`Sent ${successes.length} outbox events`)
-      this.metricsService.acceptedEventsCounter.inc(successes.length)
       this.logger.log({
-        type: "EVENTS",
+        type: 'EVENTS',
         msg: `Sent ${successes.length} outbox events successfully`,
         successCount: successes.length,
-        outboxEventIds: successes,
+        outboxEventIds: successes.slice(0, 10),
         timestamp: new Date().toISOString(),
       })
     }
@@ -149,21 +147,25 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
       })
       await this.prisma.$transaction(ops)
       this.logger.error({
-        type: "EVENTS",
+        type: 'EVENTS',
         msg: `Failed to send ${failures.length} outbox events`,
         failureCount: failures.length,
-        failedEvents: failures.map(f => ({
+        failedEvents: failures.slice(0, 10).map(f => ({
           id: f.id,
           retries: f.retries,
-          status: f.retries >= this.MAX_RETRIES ? OutboxStatus.FAILED : OutboxStatus.PENDING,
+          status:
+            f.retries >= this.MAX_RETRIES
+              ? OutboxStatus.FAILED
+              : OutboxStatus.PENDING,
           error: f.error,
         })),
         timestamp: new Date().toISOString(),
       })
-      this.metricsService.failedEventsCounter.inc(failures.length)
     }
 
     this.metricsService.processedEventsCounter.inc(pending.length)
+    this.metricsService.acceptedEventsCounter.inc(successes.length)
+    this.metricsService.failedEventsCounter.inc(failures.length)
   }
 
   private delay(ms: number) {
