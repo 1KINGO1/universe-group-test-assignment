@@ -1,4 +1,8 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common'
+import {
+  Injectable,
+  OnModuleDestroy,
+  InternalServerErrorException,
+} from '@nestjs/common'
 import { PrismaService } from '@kingo1/universe-assignment-shared'
 import { MetricsService } from 'src/metrics/metrics.service'
 import { Request, Response } from 'express'
@@ -12,98 +16,124 @@ import { performance } from 'perf_hooks'
 @Injectable()
 export class EventsService implements OnModuleDestroy {
   private shuttingDown = false
-  private active = new Set<Promise<void>>()
+  private activeTasks = new Set<Promise<void>>()
+  private readonly BATCH_SIZE = 8000
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly metricsService: MetricsService,
+    private readonly metrics: MetricsService,
     private readonly logger: Logger,
   ) {}
 
   async onModuleDestroy() {
     this.shuttingDown = true
     this.logger.log('Shutting down... waiting for in-flight tasks')
-    await Promise.allSettled(Array.from(this.active))
+    await Promise.allSettled(Array.from(this.activeTasks))
     this.logger.log('All tasks completed.')
   }
 
   async processRequest(req: Request, res: Response) {
-	  res.setHeader('Connection', 'close');
-  
+    res.setHeader('Connection', 'close')
+
     if (this.shuttingDown) {
       return res.status(503).send({ error: 'Service is shutting down' })
     }
 
     const requestId = uuidv4()
-    const task = this.processStream(req, requestId)
+
+    const task = this.handleStreamRequest(req, requestId)
       .then(() => {
         res.status(200).send({ status: 'All points processed', requestId })
       })
       .catch(err => {
         this.logger.error(err, { requestId }, 'Stream processing failed')
-        res.status(500).send({ error: 'processing failed', requestId })
+        res.status(500).send({ error: 'Processing failed', requestId })
       })
 
-    this.active.add(task)
-    task.finally(() => this.active.delete(task))
+    this.activeTasks.add(task)
+    task.finally(() => this.activeTasks.delete(task))
   }
 
-  private async processStream(req: Request, requestId: string): Promise<void> {
+  private async handleStreamRequest(req: Request, requestId: string): Promise<void> {
     this.logger.log({ requestId }, 'Start processing stream')
-    const reqStart = performance.now()
-    const batchSize = 8000
-    let batch: Event[] = []
-    const queue: Promise<void>[] = []
-    let total = 0
+    const startTime = performance.now()
+
+    const eventsQueue: Promise<void>[] = []
+    let buffer: Event[] = []
+    let totalProcessed = 0
+
+    const flushBatch = async (): Promise<void> => {
+      if (!buffer.length) return
+
+      const currentBatch = buffer
+      buffer = []
+
+      const savePromise = this.prismaService.outboxEvent
+        .createMany({
+          data: currentBatch.map(e => ({
+            payload: JSON.stringify(e),
+            requestId,
+          })),
+          skipDuplicates: true,
+        })
+        .then(() => {
+          this.incAccepted(currentBatch.length)
+        })
+        .catch(err => {
+          this.incFailed(currentBatch.length)
+          throw err
+        })
+        .finally(() => {
+          this.incProcessed(currentBatch.length)
+        })
+
+      eventsQueue.push(savePromise)
+    }
 
     return new Promise<void>((resolve, reject) => {
-      const pipeline = chain([req, StreamArray.withParser()])
+      const stream = this.createStreamPipeline(req)
 
-      const flushBatch = () => {
-        if (batch.length === 0) return
-        const toSave = batch
-        batch = []
-        const p = this.prismaService.outboxEvent
-          .createMany({
-            data: toSave.map(e => ({ payload: JSON.stringify(e), requestId })),
-            skipDuplicates: true,
-          })
-          .then(() => {
-            this.metricsService.acceptedEventsCounter.inc(toSave.length);
-          })
-          .catch(err => {
-            this.metricsService.failedEventsCounter.inc(total)
-            reject(err)
-          })
-          .finally(() => {
-            this.metricsService.processedEventsCounter.inc(total)
-          })
-        queue.push(p)
-      }
+      stream.on('data', ({ value }) => {
+        buffer.push(value as Event)
+        totalProcessed++
 
-      pipeline.on('data', ({ value }) => {
-        batch.push(value as Event)
-        total++
-        if (batch.length >= batchSize) {
-          pipeline.pause()
+        if (buffer.length >= this.BATCH_SIZE) {
+          stream.pause()
           flushBatch()
-          pipeline.resume()
+            .then(() => stream.resume())
+            .catch(reject)
         }
       })
 
-      pipeline.on('end', async () => {
+      stream.on('end', async () => {
         try {
-          if (batch.length) flushBatch()
-          await Promise.all(queue)
-          const duration = performance.now() - reqStart
-          this.logger.log({ requestId, total, duration }, 'Finished processing stream')
+          await flushBatch()
+          await Promise.all(eventsQueue)
+          const duration = performance.now() - startTime
+          this.logger.log({ requestId, total: totalProcessed, duration }, 'Finished processing stream')
           resolve()
-        } catch (e) {
-          reject(e)
+        } catch (error) {
+          reject(error)
         }
       })
 
-      pipeline.on('error', err => reject(err))
+      stream.on('error', reject)
     })
+  }
+
+  private createStreamPipeline(req: Request) {
+    return chain([req, StreamArray.withParser()])
+  }
+
+  private incAccepted(count: number) {
+    this.metrics.acceptedEventsCounter.inc(count)
+  }
+
+  private incFailed(count: number) {
+    this.metrics.failedEventsCounter.inc(count)
+  }
+
+  private incProcessed(count: number) {
+    this.metrics.processedEventsCounter.inc(count)
   }
 }

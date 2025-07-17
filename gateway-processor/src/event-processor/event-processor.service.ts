@@ -11,18 +11,18 @@ import { Logger } from 'nestjs-pino'
 export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
   private polling = true
   private currentBatchPromise: Promise<void> | null = null
-  private readonly POLL_INTERVAL_MS
-  private readonly BATCH_SIZE
+  private readonly POLL_INTERVAL_MS: number
+  private readonly BATCH_SIZE: number
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly natsService: NatsService,
-    private readonly configService: ConfigService,
-    private readonly metricsService: MetricsService,
+    private readonly nats: NatsService,
+    private readonly config: ConfigService,
+    private readonly metrics: MetricsService,
     private readonly logger: Logger,
   ) {
-    this.POLL_INTERVAL_MS = parseInt(this.configService.getOrThrow('OUTBOX_POLL_INTERVAL_MS'))
-    this.BATCH_SIZE = parseInt(this.configService.getOrThrow('OUTBOX_BATCH_SIZE'))
+    this.POLL_INTERVAL_MS = parseInt(this.config.getOrThrow('OUTBOX_POLL_INTERVAL_MS'))
+    this.BATCH_SIZE = parseInt(this.config.getOrThrow('OUTBOX_BATCH_SIZE'))
   }
 
   async onModuleInit() {
@@ -34,6 +34,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     this.logger.log('Stopping outbox event processor...')
     this.polling = false
+
     if (this.currentBatchPromise) {
       this.logger.log('Waiting for current batch to finish...')
       try {
@@ -43,6 +44,7 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Error during final batch:', err.message)
       }
     }
+
     this.logger.log('Outbox event processor stopped')
   }
 
@@ -58,64 +60,67 @@ export class EventProcessorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async processBatch() {
-    const events = await this.prisma.$transaction(async tx => {
-      const locked = await tx.$queryRawUnsafe<any[]>(`
+  private async processBatch(): Promise<void> {
+    const events = await this.fetchOutboxEvents()
+
+    if (!events.length) return
+
+    const results = await Promise.allSettled(events.map(e => this.handleEvent(e)))
+    const toDelete: string[] = []
+    let failed = 0
+
+    for (const [index, result] of results.entries()) {
+      const eventId = events[index].id
+      if (result.status === 'fulfilled') {
+        toDelete.push(eventId)
+      } else {
+        failed++
+        this.logger.error(`Failed to process event ${eventId}: ${result.reason}`)
+      }
+    }
+
+    if (toDelete.length) {
+      await this.prisma.outboxEvent.deleteMany({ where: { id: { in: toDelete } } })
+      this.logger.log(`Deleted ${toDelete.length} processed outbox events`)
+    }
+
+    this.metrics.processedEventsCounter.inc(events.length)
+    this.metrics.acceptedEventsCounter.inc(toDelete.length - failed)
+    this.metrics.failedEventsCounter.inc(failed)
+  }
+
+  private async fetchOutboxEvents(): Promise<Array<{ id: string; payload: unknown; request_id: string }>> {
+    return await this.prisma.$transaction(async tx => {
+      const rows = await tx.$queryRawUnsafe<any[]>(`
         SELECT id, payload, request_id FROM "outbox_events"
         FOR UPDATE SKIP LOCKED
         LIMIT ${this.BATCH_SIZE}
       `)
-
-      const ids = locked.map(e => e.id)
-
-      return ids.length ? locked : []
+      return rows || []
     })
+  }
 
-    if (!events.length) return
+  private async handleEvent(event: { id: string; payload: any; request_id: string }) {
+    const { id, payload, request_id } = event
 
-    const eventsToDelete: string[] = [];
-    let failedCount = 0;
+    let parsed: OutboxEventPayload
 
-    for (const evt of events) {
-      try {
-        const payload: OutboxEventPayload =
-          typeof evt.payload === 'string' ? JSON.parse(evt.payload) : evt.payload
+    try {
+      parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+    } catch (err) {
+      throw new Error(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
-        eventSchema.parse(payload)
-
-        await this.natsService.publish(
-          payload.source,
-          payload,
-          evt.id,
-          evt.request_id
-        )
-
-        eventsToDelete.push(evt.id)
-      } catch (error) {
-        let msg = 'Unknown error'
-        if (error instanceof ZodError) msg = 'Validation failed'
-        else if (error instanceof SyntaxError) msg = 'Invalid JSON: ' + error.message
-        else if (error instanceof Error) msg = error.message
-
-        eventsToDelete.push(evt.id)
-        failedCount++;
-
-        this.logger.error(`Failed to send outbox event ${evt.id}: ${msg}`);
-        
+    try {
+      eventSchema.parse(parsed)
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new Error(`Validation failed`)
       }
+      throw err
     }
 
-    if (eventsToDelete.length) {
-      await this.prisma.outboxEvent.deleteMany({
-        where: { id: { in: eventsToDelete } },
-      })
-
-      this.logger.log(`Successfully processed and deleted ${eventsToDelete.length} outbox events`)
-    }
-
-    this.metricsService.processedEventsCounter.inc(events.length)
-    this.metricsService.acceptedEventsCounter.inc(eventsToDelete.length - failedCount)
-    this.metricsService.failedEventsCounter.inc(failedCount)
+    await this.nats.publish(parsed.source, parsed, id, request_id)
   }
 
   private delay(ms: number) {

@@ -74,16 +74,25 @@ export class EventCollectorService implements OnModuleInit {
       }
 
       try {
-        await this.prismaService.$transaction([
-          this.prismaService.user.createMany({
-            data: userPayloads,
-            skipDuplicates: true,
-          }),
-          this.prismaService.event.createMany({
-            data: eventPayloads,
-            skipDuplicates: true,
-          }),
-        ])
+        const allUserIds: string[] = [...new Set(userPayloads.map(u => u.id as string))]
+        const existing = await this.prismaService.user.findMany({
+          where: { id: { in: allUserIds } },
+          select: { id: true },
+        })
+        const existingIds = new Set(existing.map(u => u.id))
+        const toInsert = userPayloads.filter(u => !existingIds.has(u.id as string))
+
+        if (toInsert.length > 0) {
+          await this.prismaService.user.createMany({ 
+            data: toInsert, 
+            skipDuplicates: true 
+          })
+        }
+        
+        await this.prismaService.event.createMany({
+          data: eventPayloads,
+          skipDuplicates: true,
+        }),
 
         eventPayloads.forEach(() =>
           this.metricsService.acceptedEventsCounter.inc(),
