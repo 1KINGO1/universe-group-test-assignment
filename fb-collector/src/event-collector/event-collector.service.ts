@@ -74,20 +74,13 @@ export class EventCollectorService implements OnModuleInit {
       }
 
       try {
-        const allUserIds: string[] = [...new Set(userPayloads.map(u => u.id as string))]
-        const existing = await this.prismaService.user.findMany({
-          where: { id: { in: allUserIds } },
-          select: { id: true },
-        })
-        const existingIds = new Set(existing.map(u => u.id))
-        const toInsert = userPayloads.filter(u => !existingIds.has(u.id as string))
+        userPayloads.sort((a, b) => (a.id as string).localeCompare(b!.id as string))
+        eventPayloads.sort((a, b) => a.eventId.localeCompare(b.eventId))
 
-        if (toInsert.length > 0) {
-          await this.prismaService.user.createMany({ 
-            data: toInsert, 
-            skipDuplicates: true 
-          })
-        }
+        await this.prismaService.user.createMany({ 
+          data: userPayloads, 
+          skipDuplicates: true 
+        })
         
         await this.prismaService.event.createMany({
           data: eventPayloads,

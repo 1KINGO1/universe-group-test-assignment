@@ -29,7 +29,9 @@ export class NatsConsumerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly configService: ConfigService,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.batchSize = this.configService.getOrThrow('BATCH_SIZE') ?? 200;
+  }
 
   async onModuleInit() {
     this.running = true

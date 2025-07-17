@@ -2,6 +2,8 @@ version: '3.8'
 
 services:
   publisher:
+    depends_on:
+      - gateway
     stop_grace_period: 120s
     restart: unless-stopped
     image: andriiuni/events:latest
@@ -14,9 +16,7 @@ services:
     stop_grace_period: 120s
     restart: unless-stopped
     depends_on:
-      - prisma-migrate
       - postgres
-      - publisher
     build:
       context: gateway
     environment:
@@ -31,15 +31,8 @@ services:
       retries: 5
       start_period: 30s
     command:
-      [
-        'bash',
-        'wait-for-it.sh',
-        'postgres:5432',
-        '--',
-        'npm',
-        'run',
-        'start:prod',
-      ]
+      ['bash', '-c', './wait-for-it.sh postgres:5432 && npm run prisma:deploy && npm run start:prod']
+
 
   gateway-processor:
     stop_grace_period: 60s
@@ -111,6 +104,7 @@ services:
     restart: unless-stopped
     depends_on:
       - gateway-processor
+      - gateway
     build:
       context: fb-collector
     environment:
@@ -119,6 +113,7 @@ services:
       NATS_STREAM: FACEBOOK
       NATS_CONSUMER: fb-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
+      BATCH_SIZE: 50
     networks:
       - app-network
     healthcheck:
@@ -143,6 +138,7 @@ services:
     restart: unless-stopped
     depends_on:
       - gateway-processor
+      - gateway
     build:
       context: ttk-collector
     environment:
@@ -151,6 +147,7 @@ services:
       NATS_STREAM: TIKTOK
       NATS_CONSUMER: ttk-collector
       DATABASE_URL: postgres://admin:123456@postgres/main
+      BATCH_SIZE: 50
     networks:
       - app-network
     healthcheck:
@@ -173,7 +170,7 @@ services:
   reporter:
     restart: unless-stopped
     depends_on:
-      - prisma-migrate
+      - gateway
       - postgres
     build:
       context: reporter
@@ -240,15 +237,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-
-  prisma-migrate:
-    build: migration-runner
-    environment:
-      DATABASE_URL: postgres://admin:123456@postgres/main
-    depends_on:
-      - postgres
-    networks:
-      - app-network
 
 volumes:
   nats-data:
