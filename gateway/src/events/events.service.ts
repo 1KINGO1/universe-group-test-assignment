@@ -28,7 +28,7 @@ export class EventsService implements OnModuleDestroy {
   }
 
   async processRequest(req: Request, res: Response) {
-	res.setHeader('Connection', 'close');
+	  res.setHeader('Connection', 'close');
   
     if (this.shuttingDown) {
       return res.status(503).send({ error: 'Service is shutting down' })
@@ -41,9 +41,7 @@ export class EventsService implements OnModuleDestroy {
       })
       .catch(err => {
         this.logger.error(err, { requestId }, 'Stream processing failed')
-        if (!res.headersSent) {
-          res.status(500).send({ error: 'processing failed', requestId })
-        }
+        res.status(500).send({ error: 'processing failed', requestId })
       })
 
     this.active.add(task)
