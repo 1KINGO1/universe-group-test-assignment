@@ -41,7 +41,6 @@ describe('EventProcessorService', () => {
         switch (key) {
           case 'OUTBOX_POLL_INTERVAL_MS': return '1'
           case 'OUTBOX_BATCH_SIZE': return '2'
-          case 'OUTBOX_MAX_RETRIES': return '3'
         }
       }),
     } as any
@@ -114,12 +113,12 @@ describe('EventProcessorService', () => {
     expect(prisma.outboxEvent.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ['1'] } },
     })
+    expect(metrics.processedEventsCounter.inc).toHaveBeenCalledWith(1)
     expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(1)
     expect(metrics.failedEventsCounter.inc).toHaveBeenCalledWith(0)
-    expect(metrics.processedEventsCounter.inc).toHaveBeenCalledWith(1)
   })
 
-  it('should handle JSON parse error and delete event', async () => {
+  it('should handle JSON parse error without deleting event', async () => {
     txResult = [{
       id: '2',
       payload: '{invalid json',
@@ -132,15 +131,13 @@ describe('EventProcessorService', () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('Invalid JSON')
     )
-    expect(prisma.outboxEvent.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ['2'] } },
-    })
-    expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(0)
-    expect(metrics.failedEventsCounter.inc).toHaveBeenCalledWith(1)
+    expect(prisma.outboxEvent.deleteMany).not.toHaveBeenCalled()
     expect(metrics.processedEventsCounter.inc).toHaveBeenCalledWith(1)
+    expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(-1)
+    expect(metrics.failedEventsCounter.inc).toHaveBeenCalledWith(1)
   })
 
-  it('should handle Zod validation error and delete event', async () => {
+  it('should handle Zod validation error without deleting event', async () => {
     txResult = [{
       id: '3',
       payload: JSON.stringify({ foo: 'bar' }),
@@ -155,12 +152,10 @@ describe('EventProcessorService', () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('Validation failed')
     )
-    expect(prisma.outboxEvent.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ['3'] } },
-    })
-    expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(0)
-    expect(metrics.failedEventsCounter.inc).toHaveBeenCalledWith(1)
+    expect(prisma.outboxEvent.deleteMany).not.toHaveBeenCalled()
     expect(metrics.processedEventsCounter.inc).toHaveBeenCalledWith(1)
+    expect(metrics.acceptedEventsCounter.inc).toHaveBeenCalledWith(-1)
+    expect(metrics.failedEventsCounter.inc).toHaveBeenCalledWith(1)
   })
 
   it('should wait for current batch on shutdown', async () => {

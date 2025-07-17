@@ -87,7 +87,7 @@ describe('EventsService', () => {
 
     it('should process stream and return success', async () => {
       const processStreamSpy = jest
-        .spyOn<any, any>(service, 'processStream')
+        .spyOn<any, any>(service, 'handleStreamRequest')
         .mockResolvedValue(undefined)
 
       await service.processRequest(mockReq, mockRes)
@@ -101,7 +101,7 @@ describe('EventsService', () => {
   describe('onModuleDestroy', () => {
     it('should wait for all tasks to complete', async () => {
       const mockTask = new Promise<void>(resolve => setTimeout(resolve, 10))
-      ;(service as any).active.add(mockTask)
+      ;(service as any).activeTasks.add(mockTask)
 
       const promise = service.onModuleDestroy()
 
